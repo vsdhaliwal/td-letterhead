@@ -1,16 +1,50 @@
 {
-  "extends": "./tsconfig.base.json",
-  "compileOnSave": false,
-  "files": [],
-  "references": [
-    {
-      "path": "./lib/db"
-    },
-    {
-      "path": "./lib/api-client-react"
-    },
-    {
-      "path": "./lib/api-zod"
+  "compilerOptions": {
+    "target": "ES2022",
+    "lib": [
+      "dom",
+      "dom.iterable",
+      "esnext"
+    ],
+    "allowJs": false,
+    "skipLibCheck": true,
+    "strict": true,
+    "noEmit": true,
+    "esModuleInterop": true,
+    "module": "esnext",
+    "moduleResolution": "bundler",
+    "resolveJsonModule": true,
+    "isolatedModules": true,
+    "jsx": "react-jsx",
+    "incremental": true,
+    "plugins": [
+      {
+        "name": "next"
+      }
+    ],
+    "baseUrl": ".",
+    "paths": {
+      "@/*": [
+        "artifacts/letterhead/src/*"
+      ]
     }
+  },
+  "include": [
+    "next-env.d.ts",
+    "app/**/*.ts",
+    "app/**/*.tsx",
+    "artifacts/letterhead/src/App.tsx",
+    "artifacts/letterhead/src/lib/utils.ts",
+    "artifacts/letterhead/src/hooks/use-toast.ts",
+    "artifacts/letterhead/src/components/ui/button.tsx",
+    "artifacts/letterhead/src/components/ui/card.tsx",
+    "artifacts/letterhead/src/components/ui/toaster.tsx",
+    "artifacts/letterhead/src/components/ui/toast.tsx",
+    "artifacts/letterhead/src/components/ui/tooltip.tsx",
+    ".next/types/**/*.ts",
+    ".next/dev/types/**/*.ts"
+  ],
+  "exclude": [
+    "node_modules"
   ]
 }

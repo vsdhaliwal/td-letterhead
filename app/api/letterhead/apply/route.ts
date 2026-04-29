@@ -1,0 +1,291 @@
+import { NextResponse } from "next/server";
+import { PDFDocument, rgb } from "pdf-lib";
+import { spawn } from "node:child_process";
+import { promises as fs } from "node:fs";
+import path from "node:path";
+import os from "node:os";
+import { randomUUID } from "node:crypto";
+
+const MAX_FILE_SIZE_BYTES = 25 * 1024 * 1024;
+const ACCEPTED_EXTS = new Set([".pdf", ".rtf", ".doc", ".docx", ".odt"]);
+const SHIFT_DOWN_FIRST_PAGE = 0;
+const SHIFT_DOWN_OTHER_PAGES = 18;
+const TOP_HEADER_CLEANUP_HEIGHT = 34;
+const BOTTOM_FOOTER_CLEANUP_HEIGHT = 44;
+const DEFAULT_TEMPLATE_PATH =
+  path.join(process.cwd(), "letterhead-template.pdf");
+
+async function resolveSofficePath(): Promise<string | null> {
+  const candidates = [
+    process.env.SOFFICE_PATH,
+    "soffice",
+    "/opt/homebrew/bin/soffice",
+    "/usr/local/bin/soffice",
+    "/Applications/LibreOffice.app/Contents/MacOS/soffice",
+  ].filter((v): v is string => Boolean(v));
+
+  for (const candidate of candidates) {
+    if (candidate === "soffice") return candidate;
+    try {
+      await fs.access(candidate);
+      return candidate;
+    } catch {
+      // keep checking
+    }
+  }
+  return null;
+}
+
+function ensureRtfMargins(rtfText: string): string {
+  const stripped = rtfText
+    .replace(/\\margt-?\d+/g, "")
+    .replace(/\\margb-?\d+/g, "")
+    .replace(/\\margl-?\d+/g, "")
+    .replace(/\\margr-?\d+/g, "");
+
+  // Keep margins moderate so converted RTF files don't get a large
+  // top blank area on page 1.
+  const margins = "\\margt900\\margb900\\margl900\\margr900";
+  if (stripped.includes("\\rtf1")) {
+    return stripped.replace(/(\\rtf1\b)/, `$1${margins}`);
+  }
+  return stripped;
+}
+
+async function convertToPdfWithSoffice(
+  inputBuffer: Buffer,
+  ext: string,
+): Promise<Buffer> {
+  const sofficePath = await resolveSofficePath();
+  if (!sofficePath) {
+    throw new Error("soffice_not_found");
+  }
+
+  const workDir = await fs.mkdtemp(path.join(os.tmpdir(), "lh-"));
+  const profileDir = path.join(workDir, "profile");
+
+  let processedInput = inputBuffer;
+  if (ext === ".rtf") {
+    try {
+      const rtfStr = inputBuffer.toString("latin1");
+      processedInput = Buffer.from(ensureRtfMargins(rtfStr), "latin1");
+    } catch {
+      processedInput = inputBuffer;
+    }
+  }
+
+  const inputPath = path.join(workDir, `in-${randomUUID()}${ext}`);
+  await fs.writeFile(inputPath, processedInput);
+
+  try {
+    await new Promise<void>((resolve, reject) => {
+      const proc = spawn(
+        sofficePath,
+        [
+          "--headless",
+          "--norestore",
+          "--nologo",
+          "--nofirststartwizard",
+          `-env:UserInstallation=file://${profileDir}`,
+          "--convert-to",
+          "pdf",
+          "--outdir",
+          workDir,
+          inputPath,
+        ],
+        { stdio: ["ignore", "pipe", "pipe"] },
+      );
+
+      const timeout = setTimeout(() => {
+        proc.kill("SIGKILL");
+        reject(new Error("Conversion timed out"));
+      }, 60_000);
+
+      let stderr = "";
+      proc.stderr.on("data", (d) => {
+        stderr += d.toString();
+      });
+      proc.on("error", (err) => {
+        clearTimeout(timeout);
+        reject(err);
+      });
+      proc.on("close", (code) => {
+        clearTimeout(timeout);
+        if (code === 0) resolve();
+        else reject(new Error(`soffice exited with ${code}: ${stderr}`));
+      });
+    });
+
+    const baseName = path.basename(inputPath, ext);
+    const outputPath = path.join(workDir, `${baseName}.pdf`);
+    return await fs.readFile(outputPath);
+  } finally {
+    fs.rm(workDir, { recursive: true, force: true }).catch(() => {});
+  }
+}
+
+async function loadLetterheadTemplateBytes(): Promise<Buffer> {
+  const candidates = [
+    process.env.LETTERHEAD_TEMPLATE_PATH,
+    DEFAULT_TEMPLATE_PATH,
+  ].filter((v): v is string => Boolean(v));
+
+  for (const candidate of candidates) {
+    try {
+      return await fs.readFile(candidate);
+    } catch {
+      // Continue searching
+    }
+  }
+
+  throw new Error(
+    "Letterhead template PDF not found. Set LETTERHEAD_TEMPLATE_PATH or place letterhead-template.pdf in project root.",
+  );
+}
+
+async function applyLetterhead(sourcePdfBuffer: Buffer): Promise<Uint8Array> {
+  const sourceDoc = await PDFDocument.load(sourcePdfBuffer, {
+    ignoreEncryption: true,
+  });
+  const sourcePageCount = sourceDoc.getPageCount();
+  if (sourcePageCount === 0) {
+    throw new Error("This document has no pages.");
+  }
+
+  const outDoc = await PDFDocument.create();
+  const templateBytes = await loadLetterheadTemplateBytes();
+  const [templatePage] = await outDoc.embedPdf(templateBytes, [0]);
+
+  for (let pageIndex = 0; pageIndex < sourcePageCount; pageIndex++) {
+    const sourcePage = sourceDoc.getPage(pageIndex);
+    const sourceWidth = sourcePage.getWidth();
+    const sourceHeight = sourcePage.getHeight();
+    const shiftDown =
+      pageIndex === 0 ? SHIFT_DOWN_FIRST_PAGE : SHIFT_DOWN_OTHER_PAGES;
+
+    const page = outDoc.addPage([sourceWidth, sourceHeight]);
+    const width = page.getWidth();
+    const height = page.getHeight();
+    const embeddedSource = await outDoc.embedPage(sourcePage);
+
+    // Keep original content; only shift down on later pages to create gap
+    // below the letterhead logo area.
+    page.drawPage(embeddedSource, {
+      x: 0,
+      y: -shiftDown,
+      width: sourceWidth,
+      height: sourceHeight,
+    });
+
+    // Remove source header/footer traces (assessee/page marker/footer page count)
+    // without trimming body content.
+    page.drawRectangle({
+      x: 0,
+      y: height - TOP_HEADER_CLEANUP_HEIGHT,
+      width,
+      height: TOP_HEADER_CLEANUP_HEIGHT,
+      color: rgb(1, 1, 1),
+    });
+    page.drawRectangle({
+      x: 0,
+      y: 0,
+      width,
+      height: BOTTOM_FOOTER_CLEANUP_HEIGHT,
+      color: rgb(1, 1, 1),
+    });
+
+    page.drawPage(templatePage, {
+      x: 0,
+      y: 0,
+      width,
+      height,
+    });
+  }
+
+  return outDoc.save();
+}
+
+export async function POST(request: Request) {
+  try {
+    const formData = await request.formData();
+    const file = formData.get("file");
+
+    if (!(file instanceof File)) {
+      return NextResponse.json({ error: "Please upload a file." }, { status: 400 });
+    }
+
+    if (file.size > MAX_FILE_SIZE_BYTES) {
+      return NextResponse.json(
+        { error: "File is too large. Max size is 25 MB." },
+        { status: 413 },
+      );
+    }
+
+    const originalName = file.name || "computation";
+    const ext = path.extname(originalName).toLowerCase();
+    if (!ACCEPTED_EXTS.has(ext)) {
+      return NextResponse.json(
+        {
+          error:
+            "Unsupported file type. Please upload a PDF, RTF, DOC, or DOCX file.",
+        },
+        { status: 400 },
+      );
+    }
+
+    const inputBuffer = Buffer.from(await file.arrayBuffer());
+
+    let pdfBuffer: Buffer;
+    if (ext === ".pdf") {
+      pdfBuffer = inputBuffer;
+    } else {
+      try {
+        pdfBuffer = await convertToPdfWithSoffice(inputBuffer, ext);
+      } catch (err) {
+        if (err instanceof Error && err.message === "soffice_not_found") {
+          return NextResponse.json(
+            {
+              error:
+                "LibreOffice is required for DOC/RTF conversion. Install it and ensure `soffice` is available.",
+            },
+            { status: 400 },
+          );
+        }
+        return NextResponse.json(
+          {
+            error:
+              "Could not convert this file. Install LibreOffice and make sure `soffice` is available in PATH.",
+          },
+          { status: 400 },
+        );
+      }
+    }
+
+    let out: Uint8Array;
+    try {
+      out = await applyLetterhead(pdfBuffer);
+    } catch (err) {
+      const message =
+        err instanceof Error ? err.message : "Something went wrong while processing.";
+      return NextResponse.json({ error: message }, { status: 400 });
+    }
+
+    const baseName =
+      path.basename(originalName, path.extname(originalName)) || "computation";
+    const downloadName = `${baseName}-letterhead.pdf`;
+
+    return new NextResponse(Buffer.from(out), {
+      status: 200,
+      headers: {
+        "Content-Type": "application/pdf",
+        "Content-Disposition": `attachment; filename="${downloadName}"`,
+        "Content-Length": out.length.toString(),
+      },
+    });
+  } catch {
+    return NextResponse.json(
+      { error: "Something went wrong while applying the letterhead." },
+      { status: 500 },
+    );
+  }
+}

@@ -1,14 +1,13 @@
-import { useState, useRef, ChangeEvent, DragEvent } from "react";
-import { Switch, Route, Router as WouterRouter } from "wouter";
+"use client";
+
+import { useState, useRef, ChangeEvent, DragEvent, MouseEvent } from "react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { Toaster } from "@/components/ui/toaster";
 import { TooltipProvider } from "@/components/ui/tooltip";
-import NotFound from "@/pages/not-found";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { UploadCloud, FileText, CheckCircle2, AlertCircle, Loader2, X, Download, RefreshCw } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
-import tdLogo from "@assets/letterhead/td_logo.jpg";
 
 const queryClient = new QueryClient();
 const MAX_FILE_SIZE_MB = 25;
@@ -64,7 +63,7 @@ function Home() {
     }
   };
 
-  const removeFile = (e: React.MouseEvent) => {
+  const removeFile = (e: MouseEvent) => {
     e.stopPropagation();
     setFile(null);
     setError(null);
@@ -93,7 +92,7 @@ function Home() {
     formData.append("file", file);
 
     try {
-      const response = await fetch(`${import.meta.env.BASE_URL}api/letterhead/apply`, {
+      const response = await fetch(`/api/letterhead/apply`, {
         method: "POST",
         body: formData,
       });
@@ -147,7 +146,9 @@ function Home() {
       <header className="bg-white border-b border-border sticky top-0 z-10 shadow-sm">
         <div className="max-w-5xl mx-auto px-4 sm:px-6 lg:px-8 h-20 flex items-center justify-between">
           <div className="flex items-center gap-4">
-            <img src={tdLogo} alt="Tax Deliver Logo" className="h-12 w-auto object-contain" />
+            <div className="h-12 w-12 rounded-md bg-[#1A8FD8]/10 text-[#1A8FD8] grid place-items-center font-bold">
+              TD
+            </div>
             <div className="flex flex-col">
               <span className="text-xl font-bold tracking-tight text-[#1A8FD8] leading-none">TAX DELIVER</span>
               <span className="text-[10px] uppercase tracking-widest text-muted-foreground font-semibold mt-1">
@@ -199,6 +200,8 @@ function Home() {
                         type="file"
                         ref={fileInputRef}
                         onChange={handleFileChange}
+                        title="Upload a document"
+                        aria-label="Upload document"
                         accept=".pdf,.rtf,.doc,.docx,.odt,application/pdf,application/rtf,text/rtf,application/msword,application/vnd.openxmlformats-officedocument.wordprocessingml.document"
                         className="hidden"
                       />
@@ -333,7 +336,7 @@ function Home() {
               99 11 22 44 20
             </span>
             <span className="hidden md:inline text-border">•</span>
-            <a href="https://www.taxdeliver.com" target="_blank" rel="noreferrer" className="hover:text-primary transition-colors">
+            <a href="https://www.taxdeliver.com" target="_blank" rel="noopener noreferrer" className="hover:text-primary transition-colors">
               www.taxdeliver.com
             </a>
             <span className="hidden md:inline text-border">•</span>
@@ -347,22 +350,11 @@ function Home() {
   );
 }
 
-function Router() {
-  return (
-    <Switch>
-      <Route path="/" component={Home} />
-      <Route component={NotFound} />
-    </Switch>
-  );
-}
-
 function App() {
   return (
     <QueryClientProvider client={queryClient}>
       <TooltipProvider>
-        <WouterRouter base={import.meta.env.BASE_URL.replace(/\/$/, "")}>
-          <Router />
-        </WouterRouter>
+        <Home />
         <Toaster />
       </TooltipProvider>
     </QueryClientProvider>

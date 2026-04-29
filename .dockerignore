@@ -1,0 +1,13 @@
+.git
+.gitignore
+.next
+node_modules
+npm-debug.log*
+.DS_Store
+
+# Keep runtime image lean
+artifacts/api-server
+artifacts/mockup-sandbox
+attached_assets
+lib
+scripts
