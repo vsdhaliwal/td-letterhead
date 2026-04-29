@@ -9,7 +9,8 @@ import { randomUUID } from "node:crypto";
 const MAX_FILE_SIZE_BYTES = 25 * 1024 * 1024;
 const ACCEPTED_EXTS = new Set([".pdf", ".rtf", ".doc", ".docx", ".odt"]);
 const TOP_TRIM_FIRST_PAGE = 0;
-const TOP_TRIM_OTHER_PAGES = 18;
+const TOP_TRIM_OTHER_PAGES = 6;
+const SHIFT_DOWN_OTHER_PAGES = 10;
 const TOP_HEADER_CLEANUP_HEIGHT = 34;
 const BOTTOM_FOOTER_CLEANUP_HEIGHT = 44;
 const DEFAULT_TEMPLATE_PATH =
@@ -172,10 +173,12 @@ async function applyLetterhead(sourcePdfBuffer: Buffer): Promise<Uint8Array> {
       top: sourceHeight - topTrim,
     });
 
-    // Trim the top on later pages to keep a gap under branding.
+    const shiftDown = pageIndex === 0 ? 0 : SHIFT_DOWN_OTHER_PAGES;
+
+    // Hybrid layout: tiny trim + gentle shift to preserve content.
     page.drawPage(embeddedSource, {
       x: 0,
-      y: 0,
+      y: -shiftDown,
       width: sourceWidth,
       height: sourceHeight - topTrim,
     });
