@@ -8,10 +8,10 @@ import { randomUUID } from "node:crypto";
 
 const MAX_FILE_SIZE_BYTES = 25 * 1024 * 1024;
 const ACCEPTED_EXTS = new Set([".pdf", ".rtf", ".doc", ".docx", ".odt"]);
-const TOP_TRIM_FIRST_PAGE = 0;
-const TOP_TRIM_OTHER_PAGES = 12;
-const TOP_HEADER_CLEANUP_HEIGHT = 34;
-const BOTTOM_FOOTER_CLEANUP_HEIGHT = 36;
+const TOP_TRIM_FIRST_PAGE = 92;
+const TOP_TRIM_OTHER_PAGES = 96;
+const TOP_HEADER_CLEANUP_HEIGHT = 56;
+const BOTTOM_FOOTER_CLEANUP_HEIGHT = 42;
 const DEFAULT_TEMPLATE_PATH =
   path.join(process.cwd(), "letterhead-template.pdf");
 
@@ -43,9 +43,8 @@ function ensureRtfMargins(rtfText: string): string {
     .replace(/\\margl-?\d+/g, "")
     .replace(/\\margr-?\d+/g, "");
 
-  // Keep RTF margins tight enough to avoid unnecessary page growth
-  // while still preserving readable body spacing.
-  const margins = "\\margt600\\margb600\\margl720\\margr720";
+  // Keep moderate margins so converted pages stay stable with letterhead overlay.
+  const margins = "\\margt900\\margb900\\margl900\\margr900";
   if (stripped.includes("\\rtf1")) {
     return stripped.replace(/(\\rtf1\b)/, `$1${margins}`);
   }
