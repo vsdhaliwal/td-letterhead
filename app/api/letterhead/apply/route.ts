@@ -9,7 +9,7 @@ import { randomUUID } from "node:crypto";
 const MAX_FILE_SIZE_BYTES = 25 * 1024 * 1024;
 const ACCEPTED_EXTS = new Set([".pdf", ".rtf", ".doc", ".docx", ".odt"]);
 const TOP_TRIM_FIRST_PAGE = 92;
-const TOP_TRIM_OTHER_PAGES = 40;
+const TOP_TRIM_OTHER_PAGES = 30;
 const TOP_HEADER_CLEANUP_HEIGHT = 56;
 const BOTTOM_FOOTER_CLEANUP_HEIGHT = 64;
 const DEFAULT_TEMPLATE_PATH =
