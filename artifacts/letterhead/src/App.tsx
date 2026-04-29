@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useRef, ChangeEvent, DragEvent, MouseEvent } from "react";
+import { useState, useRef, useEffect, ChangeEvent, DragEvent, MouseEvent } from "react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { Toaster } from "@/components/ui/toaster";
 import { TooltipProvider } from "@/components/ui/tooltip";
@@ -13,13 +13,36 @@ const queryClient = new QueryClient();
 const MAX_FILE_SIZE_MB = 25;
 const MAX_FILE_SIZE_BYTES = MAX_FILE_SIZE_MB * 1024 * 1024;
 
+type TuneSettings = {
+  topTrimFirstPage: number;
+  topTrimOtherPages: number;
+  topHeaderCleanupFirstPage: number;
+  topHeaderCleanupOtherPages: number;
+  bottomFooterCleanupFirstPage: number;
+  bottomFooterCleanupOtherPages: number;
+};
+
 function Home() {
   const [file, setFile] = useState<File | null>(null);
   const [isDragging, setIsDragging] = useState(false);
   const [isProcessing, setIsProcessing] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [successData, setSuccessData] = useState<{ url: string; filename: string } | null>(null);
+  const [tune, setTune] = useState<TuneSettings>({
+    topTrimFirstPage: 92,
+    topTrimOtherPages: 30,
+    topHeaderCleanupFirstPage: 56,
+    topHeaderCleanupOtherPages: 64,
+    bottomFooterCleanupFirstPage: 64,
+    bottomFooterCleanupOtherPages: 84,
+  });
   const fileInputRef = useRef<HTMLInputElement>(null);
+
+  useEffect(() => {
+    return () => {
+      if (successData?.url) URL.revokeObjectURL(successData.url);
+    };
+  }, [successData]);
 
   const handleDragOver = (e: DragEvent<HTMLDivElement>) => {
     e.preventDefault();
@@ -90,6 +113,12 @@ function Home() {
 
     const formData = new FormData();
     formData.append("file", file);
+    formData.append("topTrimFirstPage", String(tune.topTrimFirstPage));
+    formData.append("topTrimOtherPages", String(tune.topTrimOtherPages));
+    formData.append("topHeaderCleanupFirstPage", String(tune.topHeaderCleanupFirstPage));
+    formData.append("topHeaderCleanupOtherPages", String(tune.topHeaderCleanupOtherPages));
+    formData.append("bottomFooterCleanupFirstPage", String(tune.bottomFooterCleanupFirstPage));
+    formData.append("bottomFooterCleanupOtherPages", String(tune.bottomFooterCleanupOtherPages));
 
     try {
       const response = await fetch(`/api/letterhead/apply`, {
@@ -114,14 +143,7 @@ function Home() {
       const url = URL.createObjectURL(blob);
       const originalName = file.name.replace(/\.(pdf|rtf|docx?|odt)$/i, "");
       const newFilename = `${originalName}-letterhead.pdf`;
-
-      // Auto-download
-      const a = document.createElement("a");
-      a.href = url;
-      a.download = newFilename;
-      document.body.appendChild(a);
-      a.click();
-      document.body.removeChild(a);
+      if (successData?.url) URL.revokeObjectURL(successData.url);
 
       setSuccessData({ url, filename: newFilename });
     } catch (err: any) {
@@ -132,6 +154,7 @@ function Home() {
   };
 
   const resetState = () => {
+    if (successData?.url) URL.revokeObjectURL(successData.url);
     setFile(null);
     setSuccessData(null);
     setError(null);
@@ -169,6 +192,34 @@ function Home() {
         </div>
 
         <div className="w-full max-w-xl">
+          <Card className="mb-6 border-border/50 bg-white">
+            <CardContent className="p-4 grid grid-cols-2 gap-3 text-sm">
+              <label className="flex flex-col gap-1">
+                Top Trim P1
+                <input type="number" min={0} max={200} value={tune.topTrimFirstPage} onChange={(e) => setTune((t) => ({ ...t, topTrimFirstPage: Number(e.target.value || 0) }))} className="border rounded px-2 py-1" />
+              </label>
+              <label className="flex flex-col gap-1">
+                Top Trim P2+
+                <input type="number" min={0} max={200} value={tune.topTrimOtherPages} onChange={(e) => setTune((t) => ({ ...t, topTrimOtherPages: Number(e.target.value || 0) }))} className="border rounded px-2 py-1" />
+              </label>
+              <label className="flex flex-col gap-1">
+                Top Cleanup P1
+                <input type="number" min={0} max={200} value={tune.topHeaderCleanupFirstPage} onChange={(e) => setTune((t) => ({ ...t, topHeaderCleanupFirstPage: Number(e.target.value || 0) }))} className="border rounded px-2 py-1" />
+              </label>
+              <label className="flex flex-col gap-1">
+                Top Cleanup P2+
+                <input type="number" min={0} max={200} value={tune.topHeaderCleanupOtherPages} onChange={(e) => setTune((t) => ({ ...t, topHeaderCleanupOtherPages: Number(e.target.value || 0) }))} className="border rounded px-2 py-1" />
+              </label>
+              <label className="flex flex-col gap-1">
+                Bottom Cleanup P1
+                <input type="number" min={0} max={200} value={tune.bottomFooterCleanupFirstPage} onChange={(e) => setTune((t) => ({ ...t, bottomFooterCleanupFirstPage: Number(e.target.value || 0) }))} className="border rounded px-2 py-1" />
+              </label>
+              <label className="flex flex-col gap-1">
+                Bottom Cleanup P2+
+                <input type="number" min={0} max={200} value={tune.bottomFooterCleanupOtherPages} onChange={(e) => setTune((t) => ({ ...t, bottomFooterCleanupOtherPages: Number(e.target.value || 0) }))} className="border rounded px-2 py-1" />
+              </label>
+            </CardContent>
+          </Card>
           <AnimatePresence mode="wait">
             {!successData ? (
               <motion.div
@@ -303,6 +354,7 @@ function Home() {
                     </p>
                   </div>
                   <CardContent className="p-8 bg-white flex flex-col items-center gap-4">
+                    <iframe src={successData.url} title="PDF preview" className="w-full h-[420px] border rounded-md" />
                     <div className="flex flex-col sm:flex-row gap-4 w-full">
                       <Button asChild variant="outline" className="flex-1 h-12">
                         <a href={successData.url} download={successData.filename}>

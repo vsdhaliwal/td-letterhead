@@ -10,14 +10,27 @@ const MAX_FILE_SIZE_BYTES = 25 * 1024 * 1024;
 const ACCEPTED_EXTS = new Set([".pdf", ".rtf", ".doc", ".docx", ".odt"]);
 const TOP_TRIM_FIRST_PAGE = 92;
 const TOP_TRIM_OTHER_PAGES = 30;
-const TOP_HEADER_CLEANUP_HEIGHT = 56;
-const BOTTOM_FOOTER_CLEANUP_HEIGHT = 64;
+const TOP_HEADER_CLEANUP_HEIGHT_FIRST_PAGE = 56;
+const TOP_HEADER_CLEANUP_HEIGHT_OTHER_PAGES = 64;
+const BOTTOM_FOOTER_CLEANUP_HEIGHT_FIRST_PAGE = 64;
+const BOTTOM_FOOTER_CLEANUP_HEIGHT_OTHER_PAGES = 84;
 const DEFAULT_TEMPLATE_PATH =
   path.join(process.cwd(), "letterhead-template.pdf");
 const DEFAULT_TEMPLATE_PATH_AFTER_FIRST_PAGE = path.join(
   process.cwd(),
   "letterhead-template-after-first-page.pdf",
 );
+const MIN_TUNE = 0;
+const MAX_TUNE = 200;
+
+type LetterheadTune = {
+  topTrimFirstPage: number;
+  topTrimOtherPages: number;
+  topHeaderCleanupFirstPage: number;
+  topHeaderCleanupOtherPages: number;
+  bottomFooterCleanupFirstPage: number;
+  bottomFooterCleanupOtherPages: number;
+};
 
 async function resolveSofficePath(): Promise<string | null> {
   const candidates = [
@@ -160,7 +173,44 @@ async function loadLetterheadTemplates(): Promise<{
   return { firstPageTemplateBytes, otherPagesTemplateBytes };
 }
 
-async function applyLetterhead(sourcePdfBuffer: Buffer): Promise<Uint8Array> {
+function clampTuneValue(value: number, fallback: number): number {
+  if (Number.isNaN(value)) return fallback;
+  return Math.max(MIN_TUNE, Math.min(MAX_TUNE, Math.round(value)));
+}
+
+function parseTune(formData: FormData): LetterheadTune {
+  const getNum = (key: string, fallback: number) => {
+    const raw = formData.get(key);
+    if (typeof raw !== "string") return fallback;
+    return clampTuneValue(Number(raw), fallback);
+  };
+
+  return {
+    topTrimFirstPage: getNum("topTrimFirstPage", TOP_TRIM_FIRST_PAGE),
+    topTrimOtherPages: getNum("topTrimOtherPages", TOP_TRIM_OTHER_PAGES),
+    topHeaderCleanupFirstPage: getNum(
+      "topHeaderCleanupFirstPage",
+      TOP_HEADER_CLEANUP_HEIGHT_FIRST_PAGE,
+    ),
+    topHeaderCleanupOtherPages: getNum(
+      "topHeaderCleanupOtherPages",
+      TOP_HEADER_CLEANUP_HEIGHT_OTHER_PAGES,
+    ),
+    bottomFooterCleanupFirstPage: getNum(
+      "bottomFooterCleanupFirstPage",
+      BOTTOM_FOOTER_CLEANUP_HEIGHT_FIRST_PAGE,
+    ),
+    bottomFooterCleanupOtherPages: getNum(
+      "bottomFooterCleanupOtherPages",
+      BOTTOM_FOOTER_CLEANUP_HEIGHT_OTHER_PAGES,
+    ),
+  };
+}
+
+async function applyLetterhead(
+  sourcePdfBuffer: Buffer,
+  tune: LetterheadTune,
+): Promise<Uint8Array> {
   const sourceDoc = await PDFDocument.load(sourcePdfBuffer, {
     ignoreEncryption: true,
   });
@@ -179,7 +229,16 @@ async function applyLetterhead(sourcePdfBuffer: Buffer): Promise<Uint8Array> {
     const sourcePage = sourceDoc.getPage(pageIndex);
     const sourceWidth = sourcePage.getWidth();
     const sourceHeight = sourcePage.getHeight();
-    const topTrim = pageIndex === 0 ? TOP_TRIM_FIRST_PAGE : TOP_TRIM_OTHER_PAGES;
+    const topTrim =
+      pageIndex === 0 ? tune.topTrimFirstPage : tune.topTrimOtherPages;
+    const topHeaderCleanupHeight =
+      pageIndex === 0
+        ? tune.topHeaderCleanupFirstPage
+        : tune.topHeaderCleanupOtherPages;
+    const bottomFooterCleanupHeight =
+      pageIndex === 0
+        ? tune.bottomFooterCleanupFirstPage
+        : tune.bottomFooterCleanupOtherPages;
 
     const page = outDoc.addPage([sourceWidth, sourceHeight]);
     const width = page.getWidth();
@@ -203,16 +262,16 @@ async function applyLetterhead(sourcePdfBuffer: Buffer): Promise<Uint8Array> {
     // without trimming body content.
     page.drawRectangle({
       x: 0,
-      y: height - TOP_HEADER_CLEANUP_HEIGHT,
+      y: height - topHeaderCleanupHeight,
       width,
-      height: TOP_HEADER_CLEANUP_HEIGHT,
+      height: topHeaderCleanupHeight,
       color: rgb(1, 1, 1),
     });
     page.drawRectangle({
       x: 0,
       y: 0,
       width,
-      height: BOTTOM_FOOTER_CLEANUP_HEIGHT,
+      height: bottomFooterCleanupHeight,
       color: rgb(1, 1, 1),
     });
 
@@ -230,6 +289,7 @@ async function applyLetterhead(sourcePdfBuffer: Buffer): Promise<Uint8Array> {
 export async function POST(request: Request) {
   try {
     const formData = await request.formData();
+    const tune = parseTune(formData);
     const file = formData.get("file");
 
     if (!(file instanceof File)) {
@@ -285,7 +345,7 @@ export async function POST(request: Request) {
 
     let out: Uint8Array;
     try {
-      out = await applyLetterhead(pdfBuffer);
+      out = await applyLetterhead(pdfBuffer, tune);
     } catch (err) {
       const message =
         err instanceof Error ? err.message : "Something went wrong while processing.";
