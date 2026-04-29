@@ -18,9 +18,10 @@ const upload = multer({
 const BRAND_BLUE = rgb(0.102, 0.561, 0.847);
 const TEXT_NAVY = rgb(0.071, 0.118, 0.196);
 const RULE_GREY = rgb(0.78, 0.81, 0.85);
+const WHITE = rgb(1, 1, 1);
 
-const HEADER_HEIGHT = 78;
-const FOOTER_HEIGHT = 56;
+const HEADER_HEIGHT = 95;
+const FOOTER_HEIGHT = 70;
 
 const ACCEPTED_EXTS = new Set([".pdf", ".rtf", ".doc", ".docx", ".odt"]);
 
@@ -42,14 +43,43 @@ function drawCenteredText(
   page.drawText(text, { x, y, size, font, color });
 }
 
+function ensureRtfMargins(rtfText: string): string {
+  // Strip existing margin control words so ours win deterministically.
+  const stripped = rtfText
+    .replace(/\\margt-?\d+/g, "")
+    .replace(/\\margb-?\d+/g, "")
+    .replace(/\\margl-?\d+/g, "")
+    .replace(/\\margr-?\d+/g, "");
+
+  // Twips: 1 inch = 1440 twips. ~1.4" top, ~1.05" bottom, ~0.8" sides.
+  const margins = "\\margt2000\\margb1500\\margl1134\\margr1134";
+
+  if (stripped.includes("\\rtf1")) {
+    return stripped.replace(/(\\rtf1\b)/, `$1${margins}`);
+  }
+  return stripped;
+}
+
 async function convertToPdfWithSoffice(
   inputBuffer: Buffer,
   ext: string,
 ): Promise<Buffer> {
   const workDir = await fs.mkdtemp(path.join(os.tmpdir(), "lh-"));
   const profileDir = path.join(workDir, "profile");
+
+  let processedInput = inputBuffer;
+  if (ext === ".rtf") {
+    try {
+      const rtfStr = inputBuffer.toString("latin1");
+      processedInput = Buffer.from(ensureRtfMargins(rtfStr), "latin1");
+    } catch {
+      // If anything goes wrong, fall back to original bytes.
+      processedInput = inputBuffer;
+    }
+  }
+
   const inputPath = path.join(workDir, `in-${randomUUID()}${ext}`);
-  await fs.writeFile(inputPath, inputBuffer);
+  await fs.writeFile(inputPath, processedInput);
 
   try {
     await new Promise<void>((resolve, reject) => {
@@ -98,6 +128,63 @@ async function convertToPdfWithSoffice(
   }
 }
 
+interface AssesseeInfo {
+  name?: string;
+  ay?: string;
+  pan?: string;
+}
+
+async function extractAssesseeInfo(pdfBuffer: Buffer): Promise<AssesseeInfo> {
+  try {
+    const pdfjs = await import("pdfjs-dist/legacy/build/pdf.mjs");
+    const loadingTask = pdfjs.getDocument({
+      data: new Uint8Array(pdfBuffer),
+      useSystemFonts: false,
+      disableFontFace: true,
+      verbosity: 0,
+    });
+    const doc = await loadingTask.promise;
+    const page = await doc.getPage(1);
+    const content = await page.getTextContent();
+    type TextItem = { str: string; transform?: number[] };
+    const items = content.items as TextItem[];
+
+    // Build per-line text by clustering items whose y-coord (transform[5]) is similar.
+    const lines: { y: number; text: string }[] = [];
+    for (const it of items) {
+      const y = it.transform ? Math.round(it.transform[5]) : 0;
+      const existing = lines.find((l) => Math.abs(l.y - y) <= 2);
+      if (existing) existing.text += " " + it.str;
+      else lines.push({ y, text: it.str });
+    }
+    const fullText = lines
+      .sort((a, b) => b.y - a.y)
+      .map((l) => l.text.replace(/\s+/g, " ").trim())
+      .join("\n");
+
+    await doc.destroy();
+
+    const info: AssesseeInfo = {};
+
+    const nameMatch = fullText.match(
+      /Name\s+of\s+Assessee\s+(.+?)(?=\s{2,}|\n|Father|Address|E[- ]?Mail|Status|$)/i,
+    );
+    if (nameMatch) info.name = nameMatch[1].trim();
+
+    const ayMatch = fullText.match(
+      /Assessment\s+Year[\s:]*(\d{4}\s*-\s*\d{2,4})/i,
+    );
+    if (ayMatch) info.ay = ayMatch[1].replace(/\s+/g, "");
+
+    const panMatch = fullText.match(/\b([A-Z]{5}\d{4}[A-Z])\b/);
+    if (panMatch) info.pan = panMatch[1];
+
+    return info;
+  } catch {
+    return {};
+  }
+}
+
 router.post(
   "/letterhead/apply",
   upload.single("file"),
@@ -134,6 +221,8 @@ router.post(
         }
       }
 
+      const assessee = await extractAssesseeInfo(pdfBuffer);
+
       let pdfDoc: PDFDocument;
       try {
         pdfDoc = await PDFDocument.load(pdfBuffer, {
@@ -152,9 +241,21 @@ router.post(
       const helv = await pdfDoc.embedFont(StandardFonts.Helvetica);
 
       const pages = pdfDoc.getPages();
+      const totalPages = pages.length;
 
-      for (const page of pages) {
+      pages.forEach((page, idx) => {
+        const pageNum = idx + 1;
         const { width, height } = page.getSize();
+
+        // ----- HEADER MASK (white block hides any underlying content) -----
+        page.drawRectangle({
+          x: 0,
+          y: height - HEADER_HEIGHT,
+          width,
+          height: HEADER_HEIGHT,
+          color: WHITE,
+          opacity: 1,
+        });
 
         // ----- HEADER -----
         const headerTop = height - 18;
@@ -197,20 +298,48 @@ router.post(
           color: TEXT_NAVY,
         });
 
+        // Per-page assessee header on pages 2+ (only if we successfully parsed it)
+        if (pageNum >= 2 && (assessee.name || assessee.pan || assessee.ay)) {
+          const parts: string[] = [];
+          if (assessee.name) parts.push(`NAME OF ASSESSEE : ${assessee.name}`);
+          if (assessee.ay) parts.push(`A.Y. ${assessee.ay}`);
+          if (assessee.pan) parts.push(`PAN : ${assessee.pan}`);
+          const line = parts.join("    ");
+
+          page.drawText(line, {
+            x: 36,
+            y: height - 14,
+            size: 8,
+            font: helvBold,
+            color: TEXT_NAVY,
+          });
+        }
+
+        // Subtle divider below header
         page.drawLine({
-          start: { x: 32, y: height - HEADER_HEIGHT },
-          end: { x: width - 32, y: height - HEADER_HEIGHT },
-          thickness: 0.6,
+          start: { x: 36, y: height - HEADER_HEIGHT + 4 },
+          end: { x: width - 36, y: height - HEADER_HEIGHT + 4 },
+          thickness: 0.5,
           color: RULE_GREY,
         });
 
+        // ----- FOOTER MASK -----
+        page.drawRectangle({
+          x: 0,
+          y: 0,
+          width,
+          height: FOOTER_HEIGHT,
+          color: WHITE,
+          opacity: 1,
+        });
+
         // ----- FOOTER -----
-        const footerTop = FOOTER_HEIGHT;
+        const footerTop = FOOTER_HEIGHT - 8;
 
         page.drawLine({
-          start: { x: 32, y: footerTop },
-          end: { x: width - 32, y: footerTop },
-          thickness: 0.6,
+          start: { x: 36, y: footerTop },
+          end: { x: width - 36, y: footerTop },
+          thickness: 0.5,
           color: RULE_GREY,
         });
 
@@ -240,7 +369,20 @@ router.post(
           footerTop - 38,
           TEXT_NAVY,
         );
-      }
+
+        // Page number on every page (right-aligned just above the footer divider)
+        if (totalPages > 1) {
+          const pageLabel = `Page ${pageNum} of ${totalPages}`;
+          const pageLabelW = helv.widthOfTextAtSize(pageLabel, 8);
+          page.drawText(pageLabel, {
+            x: width - 36 - pageLabelW,
+            y: footerTop + 4,
+            size: 8,
+            font: helv,
+            color: TEXT_NAVY,
+          });
+        }
+      });
 
       const out = await pdfDoc.save();
 
