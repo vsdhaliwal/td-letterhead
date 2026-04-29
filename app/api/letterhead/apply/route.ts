@@ -11,7 +11,7 @@ const ACCEPTED_EXTS = new Set([".pdf", ".rtf", ".doc", ".docx", ".odt"]);
 const TOP_TRIM_FIRST_PAGE = 92;
 const TOP_TRIM_OTHER_PAGES = 96;
 const TOP_HEADER_CLEANUP_HEIGHT = 56;
-const BOTTOM_FOOTER_CLEANUP_HEIGHT = 42;
+const BOTTOM_FOOTER_CLEANUP_HEIGHT = 64;
 const DEFAULT_TEMPLATE_PATH =
   path.join(process.cwd(), "letterhead-template.pdf");
 
