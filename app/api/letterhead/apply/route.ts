@@ -8,8 +8,8 @@ import { randomUUID } from "node:crypto";
 
 const MAX_FILE_SIZE_BYTES = 25 * 1024 * 1024;
 const ACCEPTED_EXTS = new Set([".pdf", ".rtf", ".doc", ".docx", ".odt"]);
-const SHIFT_DOWN_FIRST_PAGE = 0;
-const SHIFT_DOWN_OTHER_PAGES = 18;
+const TOP_TRIM_FIRST_PAGE = 0;
+const TOP_TRIM_OTHER_PAGES = 18;
 const TOP_HEADER_CLEANUP_HEIGHT = 34;
 const BOTTOM_FOOTER_CLEANUP_HEIGHT = 44;
 const DEFAULT_TEMPLATE_PATH =
@@ -160,21 +160,24 @@ async function applyLetterhead(sourcePdfBuffer: Buffer): Promise<Uint8Array> {
     const sourcePage = sourceDoc.getPage(pageIndex);
     const sourceWidth = sourcePage.getWidth();
     const sourceHeight = sourcePage.getHeight();
-    const shiftDown =
-      pageIndex === 0 ? SHIFT_DOWN_FIRST_PAGE : SHIFT_DOWN_OTHER_PAGES;
+    const topTrim = pageIndex === 0 ? TOP_TRIM_FIRST_PAGE : TOP_TRIM_OTHER_PAGES;
 
     const page = outDoc.addPage([sourceWidth, sourceHeight]);
     const width = page.getWidth();
     const height = page.getHeight();
-    const embeddedSource = await outDoc.embedPage(sourcePage);
+    const embeddedSource = await outDoc.embedPage(sourcePage, {
+      left: 0,
+      right: sourceWidth,
+      bottom: 0,
+      top: sourceHeight - topTrim,
+    });
 
-    // Keep original content; only shift down on later pages to create gap
-    // below the letterhead logo area.
+    // Trim the top on later pages to keep a gap under branding.
     page.drawPage(embeddedSource, {
       x: 0,
-      y: -shiftDown,
+      y: 0,
       width: sourceWidth,
-      height: sourceHeight,
+      height: sourceHeight - topTrim,
     });
 
     // Remove source header/footer traces (assessee/page marker/footer page count)
