@@ -146,11 +146,9 @@ function Home() {
       <header className="bg-white border-b border-border sticky top-0 z-10 shadow-sm">
         <div className="max-w-5xl mx-auto px-4 sm:px-6 lg:px-8 h-20 flex items-center justify-between">
           <div className="flex items-center gap-4">
-            <div className="h-12 w-12 rounded-md bg-[#1A8FD8]/10 text-[#1A8FD8] grid place-items-center font-bold">
-              TD
-            </div>
+            <img src="/logo.png" alt="Tax Deliver Logo" className="h-12 w-12 rounded-md object-contain" />
             <div className="flex flex-col">
-              <span className="text-xl font-bold tracking-tight text-[#1A8FD8] leading-none">TAX DELIVER</span>
+              <span className="text-xl font-bold tracking-tight text-[#2d6bf0] leading-none">TAX DELIVER</span>
               <span className="text-[10px] uppercase tracking-widest text-muted-foreground font-semibold mt-1">
                 Your Trusted Tax Advisor
               </span>
@@ -163,10 +161,10 @@ function Home() {
       <main className="flex-1 max-w-3xl w-full mx-auto px-4 sm:px-6 lg:px-8 py-12 flex flex-col items-center">
         <div className="text-center mb-10 w-full">
           <h1 className="text-3xl sm:text-4xl font-extrabold text-foreground mb-4">
-            CompuTax Letterhead Tool
+            Computation Letterhead Tool
           </h1>
           <p className="text-muted-foreground text-lg max-w-2xl mx-auto">
-            Drop your CompuTax document (RTF or PDF) below to instantly stamp the firm's letterhead on every page.
+            Drop your Computation document (RTF or PDF) below to instantly stamp the firm's letterhead on every page.
           </p>
         </div>
 
@@ -328,9 +326,6 @@ function Home() {
       {/* Footer */}
       <footer className="border-t border-border bg-white mt-auto py-8">
         <div className="max-w-5xl mx-auto px-4 sm:px-6 lg:px-8 text-center text-sm text-muted-foreground flex flex-col md:flex-row justify-between items-center gap-4">
-          <p className="font-medium text-foreground/80">
-            Tax Deliver Pvt. Ltd. — C-9/28, Sec-7, Rohini, Delhi-85
-          </p>
           <div className="flex flex-wrap justify-center gap-x-6 gap-y-2">
             <span className="flex items-center gap-1.5 hover:text-foreground transition-colors cursor-pointer">
               99 11 22 44 20

@@ -14,6 +14,10 @@ const TOP_HEADER_CLEANUP_HEIGHT = 56;
 const BOTTOM_FOOTER_CLEANUP_HEIGHT = 64;
 const DEFAULT_TEMPLATE_PATH =
   path.join(process.cwd(), "letterhead-template.pdf");
+const DEFAULT_TEMPLATE_PATH_AFTER_FIRST_PAGE = path.join(
+  process.cwd(),
+  "letterhead-template-after-first-page.pdf",
+);
 
 async function resolveSofficePath(): Promise<string | null> {
   const candidates = [
@@ -123,12 +127,7 @@ async function convertToPdfWithSoffice(
   }
 }
 
-async function loadLetterheadTemplateBytes(): Promise<Buffer> {
-  const candidates = [
-    process.env.LETTERHEAD_TEMPLATE_PATH,
-    DEFAULT_TEMPLATE_PATH,
-  ].filter((v): v is string => Boolean(v));
-
+async function loadTemplateFromCandidates(candidates: string[]): Promise<Buffer> {
   for (const candidate of candidates) {
     try {
       return await fs.readFile(candidate);
@@ -136,10 +135,29 @@ async function loadLetterheadTemplateBytes(): Promise<Buffer> {
       // Continue searching
     }
   }
+  throw new Error("Template not found.");
+}
 
-  throw new Error(
-    "Letterhead template PDF not found. Set LETTERHEAD_TEMPLATE_PATH or place letterhead-template.pdf in project root.",
+async function loadLetterheadTemplates(): Promise<{
+  firstPageTemplateBytes: Buffer;
+  otherPagesTemplateBytes: Buffer;
+}> {
+  const firstPageTemplateBytes = await loadTemplateFromCandidates(
+    [process.env.LETTERHEAD_TEMPLATE_PATH, DEFAULT_TEMPLATE_PATH].filter(
+      (v): v is string => Boolean(v),
+    ),
   );
+
+  const otherPagesTemplateBytes = await loadTemplateFromCandidates(
+    [
+      process.env.LETTERHEAD_TEMPLATE_PATH_AFTER_FIRST_PAGE,
+      DEFAULT_TEMPLATE_PATH_AFTER_FIRST_PAGE,
+      process.env.LETTERHEAD_TEMPLATE_PATH,
+      DEFAULT_TEMPLATE_PATH,
+    ].filter((v): v is string => Boolean(v)),
+  );
+
+  return { firstPageTemplateBytes, otherPagesTemplateBytes };
 }
 
 async function applyLetterhead(sourcePdfBuffer: Buffer): Promise<Uint8Array> {
@@ -152,8 +170,10 @@ async function applyLetterhead(sourcePdfBuffer: Buffer): Promise<Uint8Array> {
   }
 
   const outDoc = await PDFDocument.create();
-  const templateBytes = await loadLetterheadTemplateBytes();
-  const [templatePage] = await outDoc.embedPdf(templateBytes, [0]);
+  const { firstPageTemplateBytes, otherPagesTemplateBytes } =
+    await loadLetterheadTemplates();
+  const [firstPageTemplate] = await outDoc.embedPdf(firstPageTemplateBytes, [0]);
+  const [otherPagesTemplate] = await outDoc.embedPdf(otherPagesTemplateBytes, [0]);
 
   for (let pageIndex = 0; pageIndex < sourcePageCount; pageIndex++) {
     const sourcePage = sourceDoc.getPage(pageIndex);
@@ -196,7 +216,7 @@ async function applyLetterhead(sourcePdfBuffer: Buffer): Promise<Uint8Array> {
       color: rgb(1, 1, 1),
     });
 
-    page.drawPage(templatePage, {
+    page.drawPage(pageIndex === 0 ? firstPageTemplate : otherPagesTemplate, {
       x: 0,
       y: 0,
       width,
