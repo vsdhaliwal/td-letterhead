@@ -17,12 +17,7 @@ const upload = multer({
 
 const ACCEPTED_EXTS = new Set([".pdf", ".rtf", ".doc", ".docx", ".odt"]);
 
-// Safe content area inside the letterhead template (A4 595x842 pt).
-// Tuned so user content sits cleanly between the header (logo + decoration)
-// and the footer (firm details + decoration), with small side breathing room.
-const SAFE_TOP = 110;
-const SAFE_BOTTOM = 130;
-const SAFE_SIDE = 28;
+// Letterhead template page size (A4 595x842 pt).
 
 function ensureRtfMargins(rtfText: string): string {
   // Strip existing page-margin control words so ours win deterministically.
@@ -163,50 +158,31 @@ router.post(
         return;
       }
 
-      // Build the output document fresh, with the letterhead PDF as background
-      // and user content embedded inside the safe area on each page.
+      // Strategy: copy each source page into the output at its native size
+      // (so the body text stays full-size), then overlay the letterhead PDF
+      // on top of every page. The opaque parts of the letterhead (logo,
+      // corner decorations, footer) cleanly cover any header/footer the
+      // source page may already have, and the body shows through.
       const outDoc = await PDFDocument.create();
 
       const [letterheadPage] = await outDoc.embedPdf(
         LETTERHEAD_TEMPLATE_BYTES,
         [0],
       );
-      const letterheadW = letterheadPage.width;
-      const letterheadH = letterheadPage.height;
 
-      const embeddedSourcePages = await outDoc.embedPdf(
-        pdfBuffer,
-        Array.from({ length: sourcePageCount }, (_, i) => i),
+      const sourceIndices = Array.from(
+        { length: sourcePageCount },
+        (_, i) => i,
       );
+      const copiedPages = await outDoc.copyPages(sourceDoc, sourceIndices);
 
-      const safeWidth = letterheadW - 2 * SAFE_SIDE;
-      const safeHeight = letterheadH - SAFE_TOP - SAFE_BOTTOM;
-
-      for (let i = 0; i < sourcePageCount; i++) {
-        const newPage = outDoc.addPage([letterheadW, letterheadH]);
-
-        // Letterhead background (fills the page).
-        newPage.drawPage(letterheadPage, {
+      for (const copiedPage of copiedPages) {
+        const page = outDoc.addPage(copiedPage);
+        page.drawPage(letterheadPage, {
           x: 0,
           y: 0,
-          width: letterheadW,
-          height: letterheadH,
-        });
-
-        // Embedded source page, scaled uniformly to fit the safe area
-        // and centered horizontally (top-aligned within the safe area).
-        const src = embeddedSourcePages[i];
-        const scale = Math.min(safeWidth / src.width, safeHeight / src.height);
-        const drawW = src.width * scale;
-        const drawH = src.height * scale;
-        const drawX = (letterheadW - drawW) / 2;
-        const drawY = letterheadH - SAFE_TOP - drawH; // top-align inside safe area
-
-        newPage.drawPage(src, {
-          x: drawX,
-          y: drawY,
-          width: drawW,
-          height: drawH,
+          width: page.getWidth(),
+          height: page.getHeight(),
         });
       }
 
