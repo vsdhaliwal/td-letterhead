@@ -1,12 +1,12 @@
 import { Router, type IRouter, type Request, type Response } from "express";
 import multer from "multer";
-import { PDFDocument, StandardFonts, rgb } from "pdf-lib";
+import { PDFDocument } from "pdf-lib";
 import { spawn } from "node:child_process";
 import { promises as fs } from "node:fs";
 import path from "node:path";
 import os from "node:os";
 import { randomUUID } from "node:crypto";
-import { TD_LOGO_BYTES } from "../assets/logo";
+import { LETTERHEAD_TEMPLATE_BYTES } from "../assets/letterhead-template";
 
 const router: IRouter = Router();
 
@@ -15,44 +15,25 @@ const upload = multer({
   limits: { fileSize: 25 * 1024 * 1024 },
 });
 
-const BRAND_BLUE = rgb(0.102, 0.561, 0.847);
-const TEXT_NAVY = rgb(0.071, 0.118, 0.196);
-const RULE_GREY = rgb(0.78, 0.81, 0.85);
-const WHITE = rgb(1, 1, 1);
-
-const HEADER_HEIGHT = 95;
-const FOOTER_HEIGHT = 70;
-
 const ACCEPTED_EXTS = new Set([".pdf", ".rtf", ".doc", ".docx", ".odt"]);
 
-function spacedCaps(str: string, gaps = 1): string {
-  const space = " ".repeat(gaps);
-  return str.split("").join(space);
-}
-
-function drawCenteredText(
-  page: import("pdf-lib").PDFPage,
-  text: string,
-  font: import("pdf-lib").PDFFont,
-  size: number,
-  y: number,
-  color: import("pdf-lib").RGB,
-) {
-  const width = font.widthOfTextAtSize(text, size);
-  const x = (page.getWidth() - width) / 2;
-  page.drawText(text, { x, y, size, font, color });
-}
+// Safe content area inside the letterhead template (A4 595x842 pt).
+// Tuned so user content sits cleanly between the header (logo + decoration)
+// and the footer (firm details + decoration), with small side breathing room.
+const SAFE_TOP = 110;
+const SAFE_BOTTOM = 130;
+const SAFE_SIDE = 28;
 
 function ensureRtfMargins(rtfText: string): string {
-  // Strip existing margin control words so ours win deterministically.
+  // Strip existing page-margin control words so ours win deterministically.
   const stripped = rtfText
     .replace(/\\margt-?\d+/g, "")
     .replace(/\\margb-?\d+/g, "")
     .replace(/\\margl-?\d+/g, "")
     .replace(/\\margr-?\d+/g, "");
 
-  // Twips: 1 inch = 1440 twips. ~1.4" top, ~1.05" bottom, ~0.8" sides.
-  const margins = "\\margt2000\\margb1500\\margl1134\\margr1134";
+  // Twips: 1 inch = 1440 twips. Sized to roughly match the letterhead safe area.
+  const margins = "\\margt2400\\margb2200\\margl1000\\margr1000";
 
   if (stripped.includes("\\rtf1")) {
     return stripped.replace(/(\\rtf1\b)/, `$1${margins}`);
@@ -73,7 +54,6 @@ async function convertToPdfWithSoffice(
       const rtfStr = inputBuffer.toString("latin1");
       processedInput = Buffer.from(ensureRtfMargins(rtfStr), "latin1");
     } catch {
-      // If anything goes wrong, fall back to original bytes.
       processedInput = inputBuffer;
     }
   }
@@ -128,63 +108,6 @@ async function convertToPdfWithSoffice(
   }
 }
 
-interface AssesseeInfo {
-  name?: string;
-  ay?: string;
-  pan?: string;
-}
-
-async function extractAssesseeInfo(pdfBuffer: Buffer): Promise<AssesseeInfo> {
-  try {
-    const pdfjs = await import("pdfjs-dist/legacy/build/pdf.mjs");
-    const loadingTask = pdfjs.getDocument({
-      data: new Uint8Array(pdfBuffer),
-      useSystemFonts: false,
-      disableFontFace: true,
-      verbosity: 0,
-    });
-    const doc = await loadingTask.promise;
-    const page = await doc.getPage(1);
-    const content = await page.getTextContent();
-    type TextItem = { str: string; transform?: number[] };
-    const items = content.items as TextItem[];
-
-    // Build per-line text by clustering items whose y-coord (transform[5]) is similar.
-    const lines: { y: number; text: string }[] = [];
-    for (const it of items) {
-      const y = it.transform ? Math.round(it.transform[5]) : 0;
-      const existing = lines.find((l) => Math.abs(l.y - y) <= 2);
-      if (existing) existing.text += " " + it.str;
-      else lines.push({ y, text: it.str });
-    }
-    const fullText = lines
-      .sort((a, b) => b.y - a.y)
-      .map((l) => l.text.replace(/\s+/g, " ").trim())
-      .join("\n");
-
-    await doc.destroy();
-
-    const info: AssesseeInfo = {};
-
-    const nameMatch = fullText.match(
-      /Name\s+of\s+Assessee\s+(.+?)(?=\s{2,}|\n|Father|Address|E[- ]?Mail|Status|$)/i,
-    );
-    if (nameMatch) info.name = nameMatch[1].trim();
-
-    const ayMatch = fullText.match(
-      /Assessment\s+Year[\s:]*(\d{4}\s*-\s*\d{2,4})/i,
-    );
-    if (ayMatch) info.ay = ayMatch[1].replace(/\s+/g, "");
-
-    const panMatch = fullText.match(/\b([A-Z]{5}\d{4}[A-Z])\b/);
-    if (panMatch) info.pan = panMatch[1];
-
-    return info;
-  } catch {
-    return {};
-  }
-}
-
 router.post(
   "/letterhead/apply",
   upload.single("file"),
@@ -221,11 +144,10 @@ router.post(
         }
       }
 
-      const assessee = await extractAssesseeInfo(pdfBuffer);
-
-      let pdfDoc: PDFDocument;
+      // Load source content PDF
+      let sourceDoc: PDFDocument;
       try {
-        pdfDoc = await PDFDocument.load(pdfBuffer, {
+        sourceDoc = await PDFDocument.load(pdfBuffer, {
           ignoreEncryption: true,
         });
       } catch (err) {
@@ -235,156 +157,60 @@ router.post(
           .json({ error: "Could not read this file. It may be corrupted." });
         return;
       }
+      const sourcePageCount = sourceDoc.getPageCount();
+      if (sourcePageCount === 0) {
+        res.status(400).json({ error: "This document has no pages." });
+        return;
+      }
 
-      const logoImage = await pdfDoc.embedJpg(TD_LOGO_BYTES);
-      const helvBold = await pdfDoc.embedFont(StandardFonts.HelveticaBold);
-      const helv = await pdfDoc.embedFont(StandardFonts.Helvetica);
+      // Build the output document fresh, with the letterhead PDF as background
+      // and user content embedded inside the safe area on each page.
+      const outDoc = await PDFDocument.create();
 
-      const pages = pdfDoc.getPages();
-      const totalPages = pages.length;
+      const [letterheadPage] = await outDoc.embedPdf(
+        LETTERHEAD_TEMPLATE_BYTES,
+        [0],
+      );
+      const letterheadW = letterheadPage.width;
+      const letterheadH = letterheadPage.height;
 
-      pages.forEach((page, idx) => {
-        const pageNum = idx + 1;
-        const { width, height } = page.getSize();
+      const embeddedSourcePages = await outDoc.embedPdf(
+        pdfBuffer,
+        Array.from({ length: sourcePageCount }, (_, i) => i),
+      );
 
-        // ----- HEADER MASK (white block hides any underlying content) -----
-        page.drawRectangle({
-          x: 0,
-          y: height - HEADER_HEIGHT,
-          width,
-          height: HEADER_HEIGHT,
-          color: WHITE,
-          opacity: 1,
-        });
+      const safeWidth = letterheadW - 2 * SAFE_SIDE;
+      const safeHeight = letterheadH - SAFE_TOP - SAFE_BOTTOM;
 
-        // ----- HEADER -----
-        const headerTop = height - 18;
-        const logoH = 44;
-        const logoW = (logoImage.width / logoImage.height) * logoH;
+      for (let i = 0; i < sourcePageCount; i++) {
+        const newPage = outDoc.addPage([letterheadW, letterheadH]);
 
-        const wordmark = spacedCaps("TAX DELIVER", 1);
-        const wordmarkSize = 22;
-        const wordmarkW = helvBold.widthOfTextAtSize(wordmark, wordmarkSize);
-
-        const tagline = spacedCaps("YOUR TRUSTED TAX ADVISOR", 2);
-        const taglineSize = 7.5;
-        const taglineW = helv.widthOfTextAtSize(tagline, taglineSize);
-
-        const groupGap = 14;
-        const groupW = logoW + groupGap + Math.max(wordmarkW, taglineW);
-        const groupX = (width - groupW) / 2;
-
-        page.drawImage(logoImage, {
-          x: groupX,
-          y: headerTop - logoH,
-          width: logoW,
-          height: logoH,
-        });
-
-        const textX = groupX + logoW + groupGap;
-        page.drawText(wordmark, {
-          x: textX,
-          y: headerTop - 24,
-          size: wordmarkSize,
-          font: helvBold,
-          color: BRAND_BLUE,
-        });
-
-        page.drawText(tagline, {
-          x: textX,
-          y: headerTop - 38,
-          size: taglineSize,
-          font: helv,
-          color: TEXT_NAVY,
-        });
-
-        // Per-page assessee header on pages 2+ (only if we successfully parsed it)
-        if (pageNum >= 2 && (assessee.name || assessee.pan || assessee.ay)) {
-          const parts: string[] = [];
-          if (assessee.name) parts.push(`NAME OF ASSESSEE : ${assessee.name}`);
-          if (assessee.ay) parts.push(`A.Y. ${assessee.ay}`);
-          if (assessee.pan) parts.push(`PAN : ${assessee.pan}`);
-          const line = parts.join("    ");
-
-          page.drawText(line, {
-            x: 36,
-            y: height - 14,
-            size: 8,
-            font: helvBold,
-            color: TEXT_NAVY,
-          });
-        }
-
-        // Subtle divider below header
-        page.drawLine({
-          start: { x: 36, y: height - HEADER_HEIGHT + 4 },
-          end: { x: width - 36, y: height - HEADER_HEIGHT + 4 },
-          thickness: 0.5,
-          color: RULE_GREY,
-        });
-
-        // ----- FOOTER MASK -----
-        page.drawRectangle({
+        // Letterhead background (fills the page).
+        newPage.drawPage(letterheadPage, {
           x: 0,
           y: 0,
-          width,
-          height: FOOTER_HEIGHT,
-          color: WHITE,
-          opacity: 1,
+          width: letterheadW,
+          height: letterheadH,
         });
 
-        // ----- FOOTER -----
-        const footerTop = FOOTER_HEIGHT - 8;
+        // Embedded source page, scaled uniformly to fit the safe area
+        // and centered horizontally (top-aligned within the safe area).
+        const src = embeddedSourcePages[i];
+        const scale = Math.min(safeWidth / src.width, safeHeight / src.height);
+        const drawW = src.width * scale;
+        const drawH = src.height * scale;
+        const drawX = (letterheadW - drawW) / 2;
+        const drawY = letterheadH - SAFE_TOP - drawH; // top-align inside safe area
 
-        page.drawLine({
-          start: { x: 36, y: footerTop },
-          end: { x: width - 36, y: footerTop },
-          thickness: 0.5,
-          color: RULE_GREY,
+        newPage.drawPage(src, {
+          x: drawX,
+          y: drawY,
+          width: drawW,
+          height: drawH,
         });
+      }
 
-        drawCenteredText(
-          page,
-          "TAX DELIVER PVT. LTD.",
-          helvBold,
-          9.5,
-          footerTop - 14,
-          BRAND_BLUE,
-        );
-
-        drawCenteredText(
-          page,
-          "C-9/28, Sec-7, Rohini, Delhi-85",
-          helv,
-          8.5,
-          footerTop - 26,
-          TEXT_NAVY,
-        );
-
-        drawCenteredText(
-          page,
-          "99 11 22 44 20  |  www.taxdeliver.com  |  team@taxdeliver.com",
-          helv,
-          8.5,
-          footerTop - 38,
-          TEXT_NAVY,
-        );
-
-        // Page number on every page (right-aligned just above the footer divider)
-        if (totalPages > 1) {
-          const pageLabel = `Page ${pageNum} of ${totalPages}`;
-          const pageLabelW = helv.widthOfTextAtSize(pageLabel, 8);
-          page.drawText(pageLabel, {
-            x: width - 36 - pageLabelW,
-            y: footerTop + 4,
-            size: 8,
-            font: helv,
-            color: TEXT_NAVY,
-          });
-        }
-      });
-
-      const out = await pdfDoc.save();
+      const out = await outDoc.save();
 
       const baseName =
         path.basename(originalName, path.extname(originalName)) ||
