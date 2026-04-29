@@ -34,8 +34,12 @@ function Home() {
 
   const validateAndSetFile = (selectedFile: File) => {
     setError(null);
-    if (selectedFile.type !== "application/pdf") {
-      setError("Please select a valid PDF file.");
+    const name = selectedFile.name.toLowerCase();
+    const ok = [".pdf", ".rtf", ".doc", ".docx", ".odt"].some((ext) =>
+      name.endsWith(ext),
+    );
+    if (!ok) {
+      setError("Please select a PDF, RTF, DOC, or DOCX file.");
       return;
     }
     if (selectedFile.size > MAX_FILE_SIZE_BYTES) {
@@ -109,7 +113,7 @@ function Home() {
 
       const blob = await response.blob();
       const url = URL.createObjectURL(blob);
-      const originalName = file.name.replace(/\.pdf$/i, "");
+      const originalName = file.name.replace(/\.(pdf|rtf|docx?|odt)$/i, "");
       const newFilename = `${originalName}-letterhead.pdf`;
 
       // Auto-download
@@ -161,7 +165,7 @@ function Home() {
             CompuTax Letterhead Tool
           </h1>
           <p className="text-muted-foreground text-lg max-w-2xl mx-auto">
-            Drop your CompuTax PDF below to instantly stamp the firm's letterhead on every page.
+            Drop your CompuTax document (RTF or PDF) below to instantly stamp the firm's letterhead on every page.
           </p>
         </div>
 
@@ -195,7 +199,7 @@ function Home() {
                         type="file"
                         ref={fileInputRef}
                         onChange={handleFileChange}
-                        accept="application/pdf"
+                        accept=".pdf,.rtf,.doc,.docx,.odt,application/pdf,application/rtf,text/rtf,application/msword,application/vnd.openxmlformats-officedocument.wordprocessingml.document"
                         className="hidden"
                       />
 
@@ -205,10 +209,10 @@ function Home() {
                             <UploadCloud className="w-8 h-8" />
                           </div>
                           <h3 className="text-lg font-semibold text-foreground mb-1">
-                            Click or drag PDF here
+                            Click or drag your file here
                           </h3>
                           <p className="text-sm text-muted-foreground">
-                            Supports single PDF up to {MAX_FILE_SIZE_MB}MB
+                            PDF, RTF, DOC or DOCX &middot; up to {MAX_FILE_SIZE_MB}MB
                           </p>
                         </>
                       ) : (

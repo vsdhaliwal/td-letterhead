@@ -1,6 +1,11 @@
 import { Router, type IRouter, type Request, type Response } from "express";
 import multer from "multer";
 import { PDFDocument, StandardFonts, rgb } from "pdf-lib";
+import { spawn } from "node:child_process";
+import { promises as fs } from "node:fs";
+import path from "node:path";
+import os from "node:os";
+import { randomUUID } from "node:crypto";
 import { TD_LOGO_BYTES } from "../assets/logo";
 
 const router: IRouter = Router();
@@ -16,6 +21,8 @@ const RULE_GREY = rgb(0.78, 0.81, 0.85);
 
 const HEADER_HEIGHT = 78;
 const FOOTER_HEIGHT = 56;
+
+const ACCEPTED_EXTS = new Set([".pdf", ".rtf", ".doc", ".docx", ".odt"]);
 
 function spacedCaps(str: string, gaps = 1): string {
   const space = " ".repeat(gaps);
@@ -35,34 +42,108 @@ function drawCenteredText(
   page.drawText(text, { x, y, size, font, color });
 }
 
+async function convertToPdfWithSoffice(
+  inputBuffer: Buffer,
+  ext: string,
+): Promise<Buffer> {
+  const workDir = await fs.mkdtemp(path.join(os.tmpdir(), "lh-"));
+  const profileDir = path.join(workDir, "profile");
+  const inputPath = path.join(workDir, `in-${randomUUID()}${ext}`);
+  await fs.writeFile(inputPath, inputBuffer);
+
+  try {
+    await new Promise<void>((resolve, reject) => {
+      const proc = spawn(
+        "soffice",
+        [
+          "--headless",
+          "--norestore",
+          "--nologo",
+          "--nofirststartwizard",
+          `-env:UserInstallation=file://${profileDir}`,
+          "--convert-to",
+          "pdf",
+          "--outdir",
+          workDir,
+          inputPath,
+        ],
+        { stdio: ["ignore", "pipe", "pipe"] },
+      );
+
+      const timeout = setTimeout(() => {
+        proc.kill("SIGKILL");
+        reject(new Error("Conversion timed out"));
+      }, 60_000);
+
+      let stderr = "";
+      proc.stderr.on("data", (d) => {
+        stderr += d.toString();
+      });
+      proc.on("error", (err) => {
+        clearTimeout(timeout);
+        reject(err);
+      });
+      proc.on("close", (code) => {
+        clearTimeout(timeout);
+        if (code === 0) resolve();
+        else reject(new Error(`soffice exited with ${code}: ${stderr}`));
+      });
+    });
+
+    const baseName = path.basename(inputPath, ext);
+    const outputPath = path.join(workDir, `${baseName}.pdf`);
+    return await fs.readFile(outputPath);
+  } finally {
+    fs.rm(workDir, { recursive: true, force: true }).catch(() => {});
+  }
+}
+
 router.post(
   "/letterhead/apply",
   upload.single("file"),
   async (req: Request, res: Response): Promise<void> => {
     try {
       if (!req.file) {
-        res.status(400).json({ error: "Please upload a PDF file." });
+        res.status(400).json({ error: "Please upload a file." });
         return;
       }
 
-      const isPdfMime =
-        req.file.mimetype === "application/pdf" ||
-        req.file.originalname.toLowerCase().endsWith(".pdf");
-      if (!isPdfMime) {
-        res.status(400).json({ error: "Only PDF files are supported." });
+      const originalName = req.file.originalname || "computation";
+      const ext = path.extname(originalName).toLowerCase();
+      if (!ACCEPTED_EXTS.has(ext)) {
+        res.status(400).json({
+          error:
+            "Unsupported file type. Please upload a PDF, RTF, DOC, or DOCX file.",
+        });
         return;
+      }
+
+      let pdfBuffer: Buffer;
+      if (ext === ".pdf") {
+        pdfBuffer = req.file.buffer;
+      } else {
+        try {
+          pdfBuffer = await convertToPdfWithSoffice(req.file.buffer, ext);
+        } catch (err) {
+          req.log.warn({ err }, "Failed to convert document to PDF");
+          res.status(400).json({
+            error:
+              "Could not read this file. Please make sure it's a valid CompuTax document.",
+          });
+          return;
+        }
       }
 
       let pdfDoc: PDFDocument;
       try {
-        pdfDoc = await PDFDocument.load(req.file.buffer, {
+        pdfDoc = await PDFDocument.load(pdfBuffer, {
           ignoreEncryption: true,
         });
       } catch (err) {
-        req.log.warn({ err }, "Failed to parse uploaded PDF");
+        req.log.warn({ err }, "Failed to parse PDF");
         res
           .status(400)
-          .json({ error: "Could not read this PDF. It may be corrupted." });
+          .json({ error: "Could not read this file. It may be corrupted." });
         return;
       }
 
@@ -80,7 +161,6 @@ router.post(
         const logoH = 44;
         const logoW = (logoImage.width / logoImage.height) * logoH;
 
-        // Center wordmark + logo as a horizontal group
         const wordmark = spacedCaps("TAX DELIVER", 1);
         const wordmarkSize = 22;
         const wordmarkW = helvBold.widthOfTextAtSize(wordmark, wordmarkSize);
@@ -93,7 +173,6 @@ router.post(
         const groupW = logoW + groupGap + Math.max(wordmarkW, taglineW);
         const groupX = (width - groupW) / 2;
 
-        // Logo on the left
         page.drawImage(logoImage, {
           x: groupX,
           y: headerTop - logoH,
@@ -101,7 +180,6 @@ router.post(
           height: logoH,
         });
 
-        // Wordmark on the right of the logo
         const textX = groupX + logoW + groupGap;
         page.drawText(wordmark, {
           x: textX,
@@ -119,7 +197,6 @@ router.post(
           color: TEXT_NAVY,
         });
 
-        // Header divider line
         page.drawLine({
           start: { x: 32, y: height - HEADER_HEIGHT },
           end: { x: width - 32, y: height - HEADER_HEIGHT },
@@ -168,7 +245,8 @@ router.post(
       const out = await pdfDoc.save();
 
       const baseName =
-        req.file.originalname.replace(/\.pdf$/i, "") || "computation";
+        path.basename(originalName, path.extname(originalName)) ||
+        "computation";
       const downloadName = `${baseName}-letterhead.pdf`;
 
       res.setHeader("Content-Type", "application/pdf");
