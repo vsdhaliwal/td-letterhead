@@ -557,7 +557,7 @@ function Home() {
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 text-center text-sm text-muted-foreground flex flex-col md:flex-row justify-between items-center gap-4">
           <div className="flex flex-wrap justify-center gap-x-6 gap-y-2">
             <span className="flex items-center gap-1.5 hover:text-foreground transition-colors cursor-pointer">
-              +91 99 11 22 44 20
+              99 11 22 44 20
             </span>
             <span className="hidden md:inline text-border">•</span>
             <a href="https://www.taxdeliver.com" target="_blank" rel="noopener noreferrer" className="hover:text-primary transition-colors">

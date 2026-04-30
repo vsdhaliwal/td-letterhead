@@ -1774,7 +1774,7 @@ function Home() {
                         children: [
                             /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("span", {
                                 className: "flex items-center gap-1.5 hover:text-foreground transition-colors cursor-pointer",
-                                children: "+91 99 11 22 44 20"
+                                children: "99 11 22 44 20"
                             }, void 0, false, {
                                 fileName: "[project]/artifacts/letterhead/src/App.tsx",
                                 lineNumber: 559,
