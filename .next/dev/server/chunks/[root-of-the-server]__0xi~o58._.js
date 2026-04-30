@@ -103,11 +103,15 @@ const ACCEPTED_EXTS = new Set([
     ".odt"
 ]);
 const TOP_TRIM_FIRST_PAGE = 92;
-const TOP_TRIM_OTHER_PAGES = 96;
-const TOP_HEADER_CLEANUP_HEIGHT = 56;
-const BOTTOM_FOOTER_CLEANUP_HEIGHT = 64;
+const TOP_TRIM_OTHER_PAGES = 30;
+const TOP_HEADER_CLEANUP_HEIGHT_FIRST_PAGE = 56;
+const TOP_HEADER_CLEANUP_HEIGHT_OTHER_PAGES = 64;
+const BOTTOM_FOOTER_CLEANUP_HEIGHT_FIRST_PAGE = 64;
+const BOTTOM_FOOTER_CLEANUP_HEIGHT_OTHER_PAGES = 84;
 const DEFAULT_TEMPLATE_PATH = __TURBOPACK__imported__module__$5b$externals$5d2f$node$3a$path__$5b$external$5d$__$28$node$3a$path$2c$__cjs$29$__["default"].join(process.cwd(), "letterhead-template.pdf");
 const DEFAULT_TEMPLATE_PATH_AFTER_FIRST_PAGE = __TURBOPACK__imported__module__$5b$externals$5d2f$node$3a$path__$5b$external$5d$__$28$node$3a$path$2c$__cjs$29$__["default"].join(process.cwd(), "letterhead-template-after-first-page.pdf");
+const MIN_TUNE = 0;
+const MAX_TUNE = 200;
 async function resolveSofficePath() {
     const candidates = [
         process.env.SOFFICE_PATH,
@@ -228,7 +232,26 @@ async function loadLetterheadTemplates() {
         otherPagesTemplateBytes
     };
 }
-async function applyLetterhead(sourcePdfBuffer) {
+function clampTuneValue(value, fallback) {
+    if (Number.isNaN(value)) return fallback;
+    return Math.max(MIN_TUNE, Math.min(MAX_TUNE, Math.round(value)));
+}
+function parseTune(formData) {
+    const getNum = (key, fallback)=>{
+        const raw = formData.get(key);
+        if (typeof raw !== "string") return fallback;
+        return clampTuneValue(Number(raw), fallback);
+    };
+    return {
+        topTrimFirstPage: getNum("topTrimFirstPage", TOP_TRIM_FIRST_PAGE),
+        topTrimOtherPages: getNum("topTrimOtherPages", TOP_TRIM_OTHER_PAGES),
+        topHeaderCleanupFirstPage: getNum("topHeaderCleanupFirstPage", TOP_HEADER_CLEANUP_HEIGHT_FIRST_PAGE),
+        topHeaderCleanupOtherPages: getNum("topHeaderCleanupOtherPages", TOP_HEADER_CLEANUP_HEIGHT_OTHER_PAGES),
+        bottomFooterCleanupFirstPage: getNum("bottomFooterCleanupFirstPage", BOTTOM_FOOTER_CLEANUP_HEIGHT_FIRST_PAGE),
+        bottomFooterCleanupOtherPages: getNum("bottomFooterCleanupOtherPages", BOTTOM_FOOTER_CLEANUP_HEIGHT_OTHER_PAGES)
+    };
+}
+async function applyLetterhead(sourcePdfBuffer, tune) {
     const sourceDoc = await __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$pdf$2d$lib$2f$es$2f$api$2f$PDFDocument$2e$js__$5b$app$2d$route$5d$__$28$ecmascript$29$__$3c$export__default__as__PDFDocument$3e$__["PDFDocument"].load(sourcePdfBuffer, {
         ignoreEncryption: true
     });
@@ -248,7 +271,9 @@ async function applyLetterhead(sourcePdfBuffer) {
         const sourcePage = sourceDoc.getPage(pageIndex);
         const sourceWidth = sourcePage.getWidth();
         const sourceHeight = sourcePage.getHeight();
-        const topTrim = pageIndex === 0 ? TOP_TRIM_FIRST_PAGE : TOP_TRIM_OTHER_PAGES;
+        const topTrim = pageIndex === 0 ? tune.topTrimFirstPage : tune.topTrimOtherPages;
+        const topHeaderCleanupHeight = pageIndex === 0 ? tune.topHeaderCleanupFirstPage : tune.topHeaderCleanupOtherPages;
+        const bottomFooterCleanupHeight = pageIndex === 0 ? tune.bottomFooterCleanupFirstPage : tune.bottomFooterCleanupOtherPages;
         const page = outDoc.addPage([
             sourceWidth,
             sourceHeight
@@ -272,16 +297,16 @@ async function applyLetterhead(sourcePdfBuffer) {
         // without trimming body content.
         page.drawRectangle({
             x: 0,
-            y: height - TOP_HEADER_CLEANUP_HEIGHT,
+            y: height - topHeaderCleanupHeight,
             width,
-            height: TOP_HEADER_CLEANUP_HEIGHT,
+            height: topHeaderCleanupHeight,
             color: (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$pdf$2d$lib$2f$es$2f$api$2f$colors$2e$js__$5b$app$2d$route$5d$__$28$ecmascript$29$__["rgb"])(1, 1, 1)
         });
         page.drawRectangle({
             x: 0,
             y: 0,
             width,
-            height: BOTTOM_FOOTER_CLEANUP_HEIGHT,
+            height: bottomFooterCleanupHeight,
             color: (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$pdf$2d$lib$2f$es$2f$api$2f$colors$2e$js__$5b$app$2d$route$5d$__$28$ecmascript$29$__["rgb"])(1, 1, 1)
         });
         page.drawPage(pageIndex === 0 ? firstPageTemplate : otherPagesTemplate, {
@@ -296,6 +321,7 @@ async function applyLetterhead(sourcePdfBuffer) {
 async function POST(request) {
     try {
         const formData = await request.formData();
+        const tune = parseTune(formData);
         const file = formData.get("file");
         if (!(file instanceof File)) {
             return __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$server$2e$js__$5b$app$2d$route$5d$__$28$ecmascript$29$__["NextResponse"].json({
@@ -344,7 +370,7 @@ async function POST(request) {
         }
         let out;
         try {
-            out = await applyLetterhead(pdfBuffer);
+            out = await applyLetterhead(pdfBuffer, tune);
         } catch (err) {
             const message = err instanceof Error ? err.message : "Something went wrong while processing.";
             return __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$server$2e$js__$5b$app$2d$route$5d$__$28$ecmascript$29$__["NextResponse"].json({

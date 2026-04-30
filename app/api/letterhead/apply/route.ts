@@ -5,6 +5,7 @@ import { promises as fs } from "node:fs";
 import path from "node:path";
 import os from "node:os";
 import { randomUUID } from "node:crypto";
+import { resolveTemplateById } from "../../../../lib/letterhead/templates";
 
 const MAX_FILE_SIZE_BYTES = 25 * 1024 * 1024;
 const ACCEPTED_EXTS = new Set([".pdf", ".rtf", ".doc", ".docx", ".odt"]);
@@ -14,12 +15,6 @@ const TOP_HEADER_CLEANUP_HEIGHT_FIRST_PAGE = 56;
 const TOP_HEADER_CLEANUP_HEIGHT_OTHER_PAGES = 64;
 const BOTTOM_FOOTER_CLEANUP_HEIGHT_FIRST_PAGE = 64;
 const BOTTOM_FOOTER_CLEANUP_HEIGHT_OTHER_PAGES = 84;
-const DEFAULT_TEMPLATE_PATH =
-  path.join(process.cwd(), "letterhead-template.pdf");
-const DEFAULT_TEMPLATE_PATH_AFTER_FIRST_PAGE = path.join(
-  process.cwd(),
-  "letterhead-template-after-first-page.pdf",
-);
 const MIN_TUNE = 0;
 const MAX_TUNE = 200;
 
@@ -140,39 +135,6 @@ async function convertToPdfWithSoffice(
   }
 }
 
-async function loadTemplateFromCandidates(candidates: string[]): Promise<Buffer> {
-  for (const candidate of candidates) {
-    try {
-      return await fs.readFile(candidate);
-    } catch {
-      // Continue searching
-    }
-  }
-  throw new Error("Template not found.");
-}
-
-async function loadLetterheadTemplates(): Promise<{
-  firstPageTemplateBytes: Buffer;
-  otherPagesTemplateBytes: Buffer;
-}> {
-  const firstPageTemplateBytes = await loadTemplateFromCandidates(
-    [process.env.LETTERHEAD_TEMPLATE_PATH, DEFAULT_TEMPLATE_PATH].filter(
-      (v): v is string => Boolean(v),
-    ),
-  );
-
-  const otherPagesTemplateBytes = await loadTemplateFromCandidates(
-    [
-      process.env.LETTERHEAD_TEMPLATE_PATH_AFTER_FIRST_PAGE,
-      DEFAULT_TEMPLATE_PATH_AFTER_FIRST_PAGE,
-      process.env.LETTERHEAD_TEMPLATE_PATH,
-      DEFAULT_TEMPLATE_PATH,
-    ].filter((v): v is string => Boolean(v)),
-  );
-
-  return { firstPageTemplateBytes, otherPagesTemplateBytes };
-}
-
 function clampTuneValue(value: number, fallback: number): number {
   if (Number.isNaN(value)) return fallback;
   return Math.max(MIN_TUNE, Math.min(MAX_TUNE, Math.round(value)));
@@ -210,6 +172,8 @@ function parseTune(formData: FormData): LetterheadTune {
 async function applyLetterhead(
   sourcePdfBuffer: Buffer,
   tune: LetterheadTune,
+  selectedTemplateId?: string | null,
+  selectedOtherPagesTemplateId?: string | null,
 ): Promise<Uint8Array> {
   const sourceDoc = await PDFDocument.load(sourcePdfBuffer, {
     ignoreEncryption: true,
@@ -220,10 +184,21 @@ async function applyLetterhead(
   }
 
   const outDoc = await PDFDocument.create();
-  const { firstPageTemplateBytes, otherPagesTemplateBytes } =
-    await loadLetterheadTemplates();
+  const selectedTemplate = await resolveTemplateById(selectedTemplateId);
+  const selectedOtherPagesTemplate = selectedOtherPagesTemplateId
+    ? await resolveTemplateById(selectedOtherPagesTemplateId)
+    : null;
+  const [firstPageTemplateBytes, otherPagesTemplateBytes] = await Promise.all([
+    fs.readFile(selectedTemplate.firstPagePath),
+    fs.readFile(
+      selectedOtherPagesTemplate?.firstPagePath ?? selectedTemplate.otherPagesPath,
+    ),
+  ]);
   const [firstPageTemplate] = await outDoc.embedPdf(firstPageTemplateBytes, [0]);
-  const [otherPagesTemplate] = await outDoc.embedPdf(otherPagesTemplateBytes, [0]);
+  const [otherPagesEmbeddedTemplate] = await outDoc.embedPdf(
+    otherPagesTemplateBytes,
+    [0],
+  );
 
   for (let pageIndex = 0; pageIndex < sourcePageCount; pageIndex++) {
     const sourcePage = sourceDoc.getPage(pageIndex);
@@ -275,7 +250,7 @@ async function applyLetterhead(
       color: rgb(1, 1, 1),
     });
 
-    page.drawPage(pageIndex === 0 ? firstPageTemplate : otherPagesTemplate, {
+    page.drawPage(pageIndex === 0 ? firstPageTemplate : otherPagesEmbeddedTemplate, {
       x: 0,
       y: 0,
       width,
@@ -290,6 +265,14 @@ export async function POST(request: Request) {
   try {
     const formData = await request.formData();
     const tune = parseTune(formData);
+    const selectedTemplateId =
+      typeof formData.get("templateId") === "string"
+        ? (formData.get("templateId") as string)
+        : null;
+    const selectedOtherPagesTemplateId =
+      typeof formData.get("otherPagesTemplateId") === "string"
+        ? (formData.get("otherPagesTemplateId") as string)
+        : null;
     const file = formData.get("file");
 
     if (!(file instanceof File)) {
@@ -345,7 +328,12 @@ export async function POST(request: Request) {
 
     let out: Uint8Array;
     try {
-      out = await applyLetterhead(pdfBuffer, tune);
+      out = await applyLetterhead(
+        pdfBuffer,
+        tune,
+        selectedTemplateId,
+        selectedOtherPagesTemplateId,
+      );
     } catch (err) {
       const message =
         err instanceof Error ? err.message : "Something went wrong while processing.";
