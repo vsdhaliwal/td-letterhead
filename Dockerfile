@@ -2,6 +2,8 @@ FROM node:20-bookworm-slim AS deps
 
 WORKDIR /app
 
+RUN sed -i 's|http://deb.debian.org|https://deb.debian.org|g' /etc/apt/sources.list.d/debian.sources
+
 RUN apt-get update && apt-get install -y --no-install-recommends \
     libreoffice \
     fonts-dejavu-core \
@@ -14,6 +16,8 @@ RUN npm ci
 FROM node:20-bookworm-slim AS runner
 
 WORKDIR /app
+
+RUN sed -i 's|http://deb.debian.org|https://deb.debian.org|g' /etc/apt/sources.list.d/debian.sources
 
 RUN apt-get update && apt-get install -y --no-install-recommends \
     libreoffice \
