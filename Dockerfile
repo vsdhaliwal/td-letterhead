@@ -1,3 +1,10 @@
+FROM node:20-bookworm-slim AS deps
+
+WORKDIR /app
+
+COPY package*.json ./
+RUN npm ci
+
 FROM node:20-bookworm-slim AS runner
 
 WORKDIR /app
