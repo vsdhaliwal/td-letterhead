@@ -9,5 +9,4 @@ npm-debug.log*
 artifacts/api-server
 artifacts/mockup-sandbox
 attached_assets
-lib
 scripts
