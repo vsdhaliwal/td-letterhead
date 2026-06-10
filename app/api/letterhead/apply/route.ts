@@ -25,7 +25,19 @@ type LetterheadTune = {
   topHeaderCleanupOtherPages: number;
   bottomFooterCleanupFirstPage: number;
   bottomFooterCleanupOtherPages: number;
+  contentPaddingTopFirstPage: number;
+  contentPaddingTopOtherPages: number;
+  contentPaddingBottomFirstPage: number;
+  contentPaddingBottomOtherPages: number;
 };
+
+function pageValue(
+  pageIndex: number,
+  firstPage: number,
+  otherPages: number,
+): number {
+  return pageIndex === 0 ? firstPage : otherPages;
+}
 
 async function resolveSofficePath(): Promise<string | null> {
   const candidates = [
@@ -166,6 +178,10 @@ function parseTune(formData: FormData): LetterheadTune {
       "bottomFooterCleanupOtherPages",
       BOTTOM_FOOTER_CLEANUP_HEIGHT_OTHER_PAGES,
     ),
+    contentPaddingTopFirstPage: getNum("contentPaddingTopFirstPage", 0),
+    contentPaddingTopOtherPages: getNum("contentPaddingTopOtherPages", 0),
+    contentPaddingBottomFirstPage: getNum("contentPaddingBottomFirstPage", 0),
+    contentPaddingBottomOtherPages: getNum("contentPaddingBottomOtherPages", 0),
   };
 }
 
@@ -185,39 +201,67 @@ async function applyLetterhead(
 
   const outDoc = await PDFDocument.create();
   const selectedTemplate = await resolveTemplateById(selectedTemplateId);
-  const selectedOtherPagesTemplate = selectedOtherPagesTemplateId
-    ? await resolveTemplateById(selectedOtherPagesTemplateId)
-    : null;
-  const [firstPageTemplateBytes, otherPagesTemplateBytes] = await Promise.all([
-    fs.readFile(selectedTemplate.firstPagePath),
-    fs.readFile(
-      selectedOtherPagesTemplate?.firstPagePath ?? selectedTemplate.otherPagesPath,
-    ),
-  ]);
+  const skipOtherPagesLetterhead = selectedOtherPagesTemplateId === "none";
+  const selectedOtherPagesTemplate =
+    !skipOtherPagesLetterhead && selectedOtherPagesTemplateId
+      ? await resolveTemplateById(selectedOtherPagesTemplateId)
+      : null;
+  const firstPageTemplateBytes = await fs.readFile(selectedTemplate.firstPagePath);
   const [firstPageTemplate] = await outDoc.embedPdf(firstPageTemplateBytes, [0]);
-  const [otherPagesEmbeddedTemplate] = await outDoc.embedPdf(
-    otherPagesTemplateBytes,
-    [0],
-  );
+  let otherPagesEmbeddedTemplate: Awaited<
+    ReturnType<typeof outDoc.embedPdf>
+  >[number] | null = null;
+  if (!skipOtherPagesLetterhead) {
+    const otherPagesTemplateBytes = await fs.readFile(
+      selectedOtherPagesTemplate?.firstPagePath ?? selectedTemplate.otherPagesPath,
+    );
+    [otherPagesEmbeddedTemplate] = await outDoc.embedPdf(otherPagesTemplateBytes, [0]);
+  }
 
   for (let pageIndex = 0; pageIndex < sourcePageCount; pageIndex++) {
     const sourcePage = sourceDoc.getPage(pageIndex);
     const sourceWidth = sourcePage.getWidth();
     const sourceHeight = sourcePage.getHeight();
-    const topTrim =
-      pageIndex === 0 ? tune.topTrimFirstPage : tune.topTrimOtherPages;
-    const topHeaderCleanupHeight =
-      pageIndex === 0
-        ? tune.topHeaderCleanupFirstPage
-        : tune.topHeaderCleanupOtherPages;
-    const bottomFooterCleanupHeight =
-      pageIndex === 0
-        ? tune.bottomFooterCleanupFirstPage
-        : tune.bottomFooterCleanupOtherPages;
+    const topTrim = pageValue(
+      pageIndex,
+      tune.topTrimFirstPage,
+      tune.topTrimOtherPages,
+    );
+    const paddingTop = pageValue(
+      pageIndex,
+      tune.contentPaddingTopFirstPage,
+      tune.contentPaddingTopOtherPages,
+    );
+    const paddingBottom = pageValue(
+      pageIndex,
+      tune.contentPaddingBottomFirstPage,
+      tune.contentPaddingBottomOtherPages,
+    );
+    const topHeaderCleanupHeight = pageValue(
+      pageIndex,
+      tune.topHeaderCleanupFirstPage,
+      tune.topHeaderCleanupOtherPages,
+    );
+    const bottomFooterCleanupHeight = pageValue(
+      pageIndex,
+      tune.bottomFooterCleanupFirstPage,
+      tune.bottomFooterCleanupOtherPages,
+    );
 
     const page = outDoc.addPage([sourceWidth, sourceHeight]);
     const width = page.getWidth();
     const height = page.getHeight();
+    const croppedHeight = Math.max(0, sourceHeight - topTrim);
+    const availableHeight = Math.max(0, croppedHeight - paddingTop - paddingBottom);
+    const scale =
+      croppedHeight > 0
+        ? Math.min(1, availableHeight / croppedHeight)
+        : 1;
+    const drawWidth = sourceWidth * scale;
+    const drawHeight = croppedHeight * scale;
+    const drawX = (sourceWidth - drawWidth) / 2;
+    const drawY = paddingBottom;
+
     const embeddedSource = await outDoc.embedPage(sourcePage, {
       left: 0,
       right: sourceWidth,
@@ -225,12 +269,12 @@ async function applyLetterhead(
       top: sourceHeight - topTrim,
     });
 
-    // Crop from top on later pages to create fixed gap under branding.
+    // Shrink content inward to add breathing room without cropping text away.
     page.drawPage(embeddedSource, {
-      x: 0,
-      y: 0,
-      width: sourceWidth,
-      height: sourceHeight - topTrim,
+      x: drawX,
+      y: drawY,
+      width: drawWidth,
+      height: drawHeight,
     });
 
     // Remove source header/footer traces (assessee/page marker/footer page count)
@@ -250,12 +294,11 @@ async function applyLetterhead(
       color: rgb(1, 1, 1),
     });
 
-    page.drawPage(pageIndex === 0 ? firstPageTemplate : otherPagesEmbeddedTemplate, {
-      x: 0,
-      y: 0,
-      width,
-      height,
-    });
+    if (pageIndex === 0) {
+      page.drawPage(firstPageTemplate, { x: 0, y: 0, width, height });
+    } else if (otherPagesEmbeddedTemplate) {
+      page.drawPage(otherPagesEmbeddedTemplate, { x: 0, y: 0, width, height });
+    }
   }
 
   return outDoc.save();

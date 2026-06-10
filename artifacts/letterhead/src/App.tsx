@@ -20,6 +20,10 @@ type TuneSettings = {
   topHeaderCleanupOtherPages: number;
   bottomFooterCleanupFirstPage: number;
   bottomFooterCleanupOtherPages: number;
+  contentPaddingTopFirstPage: number;
+  contentPaddingTopOtherPages: number;
+  contentPaddingBottomFirstPage: number;
+  contentPaddingBottomOtherPages: number;
 };
 
 type TemplateOption = {
@@ -45,6 +49,10 @@ function Home() {
     topHeaderCleanupOtherPages: 64,
     bottomFooterCleanupFirstPage: 64,
     bottomFooterCleanupOtherPages: 84,
+    contentPaddingTopFirstPage: 0,
+    contentPaddingTopOtherPages: 0,
+    contentPaddingBottomFirstPage: 0,
+    contentPaddingBottomOtherPages: 0,
   });
   const fileInputRef = useRef<HTMLInputElement>(null);
 
@@ -103,7 +111,9 @@ function Home() {
             options.some((option) => option.id === current) ? current : options[0].id,
           );
           setSelectedOtherPagesTemplateId((current) =>
-            current === "same-as-first" || options.some((option) => option.id === current)
+            current === "same-as-first" ||
+            current === "none" ||
+            options.some((option) => option.id === current)
               ? current
               : "same-as-first",
           );
@@ -194,6 +204,10 @@ function Home() {
         ? ""
         : selectedOtherPagesTemplateId,
     );
+    formData.append("contentPaddingTopFirstPage", String(tune.contentPaddingTopFirstPage));
+    formData.append("contentPaddingTopOtherPages", String(tune.contentPaddingTopOtherPages));
+    formData.append("contentPaddingBottomFirstPage", String(tune.contentPaddingBottomFirstPage));
+    formData.append("contentPaddingBottomOtherPages", String(tune.contentPaddingBottomOtherPages));
     formData.append("topTrimFirstPage", String(tune.topTrimFirstPage));
     formData.append("topTrimOtherPages", String(tune.topTrimOtherPages));
     formData.append("topHeaderCleanupFirstPage", String(tune.topHeaderCleanupFirstPage));
@@ -248,6 +262,7 @@ function Home() {
     selectedOtherPagesTemplateId === "same-as-first"
       ? selectedTemplateId
       : selectedOtherPagesTemplateId;
+  const showOtherPagesPreview = selectedOtherPagesTemplateId !== "none";
 
   return (
     <div className="min-h-screen flex flex-col bg-background selection:bg-primary/20">
@@ -361,6 +376,7 @@ function Home() {
                   className="border rounded px-3 py-2 bg-white"
                 >
                   <option value="same-as-first">Same as First Page</option>
+                  <option value="none">No Letterhead</option>
                   {(templates.length > 0
                     ? templates
                     : [{ id: "default", label: "Default Letterhead" }]
@@ -375,12 +391,18 @@ function Home() {
                 <div className="px-3 py-2 text-xs font-medium text-muted-foreground border-b bg-white">
                   Page 2+ Preview
                 </div>
-                <iframe
-                  key={`other-preview-${otherPagesTemplatePreviewId}`}
-                  src={`/api/letterhead/template-preview?templateId=${encodeURIComponent(otherPagesTemplatePreviewId)}&pageType=other`}
-                  title="Page 2 and onward letterhead preview"
-                  className="w-full h-[260px] bg-white"
-                />
+                {showOtherPagesPreview ? (
+                  <iframe
+                    key={`other-preview-${otherPagesTemplatePreviewId}`}
+                    src={`/api/letterhead/template-preview?templateId=${encodeURIComponent(otherPagesTemplatePreviewId)}&pageType=other`}
+                    title="Page 2 and onward letterhead preview"
+                    className="w-full h-[260px] bg-white"
+                  />
+                ) : (
+                  <div className="w-full h-[260px] bg-white flex items-center justify-center text-sm text-muted-foreground px-4 text-center">
+                    No letterhead will be applied on page 2 and onward.
+                  </div>
+                )}
               </div>
               <div className="border rounded-md">
                 <button
@@ -416,6 +438,25 @@ function Home() {
                     <label className="flex flex-col gap-1">
                       Bottom Cleanup P2+
                       <input type="number" min={0} max={200} value={tune.bottomFooterCleanupOtherPages} onChange={(e) => setTune((t) => ({ ...t, bottomFooterCleanupOtherPages: Number(e.target.value || 0) }))} className="border rounded px-2 py-1" />
+                    </label>
+                    <p className="sm:col-span-2 text-xs text-muted-foreground">
+                      Content padding shrinks the document inward to add space — nothing is cropped off.
+                    </p>
+                    <label className="flex flex-col gap-1">
+                      Content Padding Top P1
+                      <input type="number" min={0} max={200} value={tune.contentPaddingTopFirstPage} onChange={(e) => setTune((t) => ({ ...t, contentPaddingTopFirstPage: Number(e.target.value || 0) }))} className="border rounded px-2 py-1" />
+                    </label>
+                    <label className="flex flex-col gap-1">
+                      Content Padding Top P2+
+                      <input type="number" min={0} max={200} value={tune.contentPaddingTopOtherPages} onChange={(e) => setTune((t) => ({ ...t, contentPaddingTopOtherPages: Number(e.target.value || 0) }))} className="border rounded px-2 py-1" />
+                    </label>
+                    <label className="flex flex-col gap-1">
+                      Content Padding Bottom P1
+                      <input type="number" min={0} max={200} value={tune.contentPaddingBottomFirstPage} onChange={(e) => setTune((t) => ({ ...t, contentPaddingBottomFirstPage: Number(e.target.value || 0) }))} className="border rounded px-2 py-1" />
+                    </label>
+                    <label className="flex flex-col gap-1">
+                      Content Padding Bottom P2+
+                      <input type="number" min={0} max={200} value={tune.contentPaddingBottomOtherPages} onChange={(e) => setTune((t) => ({ ...t, contentPaddingBottomOtherPages: Number(e.target.value || 0) }))} className="border rounded px-2 py-1" />
                     </label>
                   </div>
                 )}

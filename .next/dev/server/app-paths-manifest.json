@@ -1,5 +1,0 @@
-{
-  "/api/letterhead/template-preview/route": "app/api/letterhead/template-preview/route.js",
-  "/api/letterhead/templates/route": "app/api/letterhead/templates/route.js",
-  "/page": "app/page.js"
-}
