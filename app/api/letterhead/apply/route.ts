@@ -178,7 +178,7 @@ function parseTune(formData: FormData): LetterheadTune {
       "bottomFooterCleanupOtherPages",
       BOTTOM_FOOTER_CLEANUP_HEIGHT_OTHER_PAGES,
     ),
-    contentPaddingTopFirstPage: getNum("contentPaddingTopFirstPage", 0),
+    contentPaddingTopFirstPage: getNum("contentPaddingTopFirstPage", 50),
     contentPaddingTopOtherPages: getNum("contentPaddingTopOtherPages", 0),
     contentPaddingBottomFirstPage: getNum("contentPaddingBottomFirstPage", 10),
     contentPaddingBottomOtherPages: getNum("contentPaddingBottomOtherPages", 25),

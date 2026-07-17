@@ -52,7 +52,7 @@ function Home() {
     topHeaderCleanupOtherPages: 0,
     bottomFooterCleanupFirstPage: 64,
     bottomFooterCleanupOtherPages: 64,
-    contentPaddingTopFirstPage: 0,
+    contentPaddingTopFirstPage: 50,
     contentPaddingTopOtherPages: 0,
     contentPaddingBottomFirstPage: 10,
     contentPaddingBottomOtherPages: 25,
