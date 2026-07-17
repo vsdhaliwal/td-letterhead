@@ -43,7 +43,7 @@ const DOCUMENT_TYPE_PRESETS: DocumentTypePreset[] = [
       topHeaderCleanupOtherPages: 0,
       bottomFooterCleanupFirstPage: 64,
       bottomFooterCleanupOtherPages: 64,
-      contentPaddingTopFirstPage: 80,
+      contentPaddingTopFirstPage: 50,
       contentPaddingTopOtherPages: 0,
       contentPaddingBottomFirstPage: 10,
       contentPaddingBottomOtherPages: 25,
@@ -52,6 +52,22 @@ const DOCUMENT_TYPE_PRESETS: DocumentTypePreset[] = [
   {
     id: "trademark-status",
     label: "Trademark Status",
+    values: {
+      topTrimFirstPage: 0,
+      topTrimOtherPages: 0,
+      topHeaderCleanupFirstPage: 0,
+      topHeaderCleanupOtherPages: 0,
+      bottomFooterCleanupFirstPage: 0,
+      bottomFooterCleanupOtherPages: 0,
+      contentPaddingTopFirstPage: 80,
+      contentPaddingTopOtherPages: 0,
+      contentPaddingBottomFirstPage: 10,
+      contentPaddingBottomOtherPages: 25,
+    },
+  },
+  {
+    id: "trademark-report",
+    label: "Trademark Report",
     values: {
       topTrimFirstPage: 90,
       topTrimOtherPages: 0,
@@ -63,23 +79,6 @@ const DOCUMENT_TYPE_PRESETS: DocumentTypePreset[] = [
       contentPaddingTopOtherPages: 0,
       contentPaddingBottomFirstPage: 50,
       contentPaddingBottomOtherPages: 40,
-    },
-  },
-  {
-    id: "trademark-report",
-    label: "Trademark Report",
-    // TODO: replace with Trademark Report values when provided
-    values: {
-      topTrimFirstPage: 0,
-      topTrimOtherPages: 0,
-      topHeaderCleanupFirstPage: 0,
-      topHeaderCleanupOtherPages: 0,
-      bottomFooterCleanupFirstPage: 0,
-      bottomFooterCleanupOtherPages: 0,
-      contentPaddingTopFirstPage: 0,
-      contentPaddingTopOtherPages: 0,
-      contentPaddingBottomFirstPage: 0,
-      contentPaddingBottomOtherPages: 0,
     },
   },
 ];
@@ -102,6 +101,7 @@ function Home() {
   const [selectedTemplateId, setSelectedTemplateId] = useState("default");
   const [selectedOtherPagesTemplateId, setSelectedOtherPagesTemplateId] = useState("same-as-first");
   const [showTuneSettings, setShowTuneSettings] = useState(false);
+  const [showLetterheadSettings, setShowLetterheadSettings] = useState(false);
   const [sourcePreviewUrl, setSourcePreviewUrl] = useState<string | null>(null);
   const [livePreviewUrl, setLivePreviewUrl] = useState<string | null>(null);
   const [livePreviewLoading, setLivePreviewLoading] = useState(false);
@@ -431,13 +431,13 @@ function Home() {
       </header>
 
       {/* Main Content */}
-      <main className="flex-1 max-w-7xl w-full mx-auto px-4 sm:px-6 lg:px-8 py-12 flex flex-col items-center">
-        <div className="text-center mb-10 w-full">
-          <h1 className="text-3xl sm:text-4xl font-extrabold text-foreground mb-4">
+      <main className="flex-1 max-w-[1600px] w-full mx-auto px-4 sm:px-6 lg:px-8 py-6 flex flex-col">
+        <div className="mb-6 w-full text-center">
+          <h1 className="text-2xl sm:text-3xl font-extrabold text-foreground">
             Tax Deliver Letterhead Tool
           </h1>
-          <p className="text-muted-foreground text-lg max-w-2xl mx-auto">
-            Drop your document (RTF or PDF) below to instantly stamp the firm's letterhead on every page.
+          <p className="text-muted-foreground text-sm mt-1">
+            Pick a document type, upload your file, and review the live result.
           </p>
         </div>
 
@@ -486,13 +486,12 @@ function Home() {
             </Card>
           </motion.div>
         ) : (
-        <>
-        <div className="w-full grid grid-cols-1 lg:grid-cols-2 gap-6 items-start">
-          <Card className="border-border/50 bg-white">
+        <div className="w-full grid grid-cols-1 xl:grid-cols-[340px_minmax(0,1fr)] gap-6 items-start">
+          <Card className="border-border/50 bg-white xl:sticky xl:top-24">
             <CardContent className="p-4 space-y-4">
               <div className="space-y-2">
                 <span className="text-sm font-medium text-foreground">Document Type</span>
-                <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
+                <div className="grid grid-cols-1 gap-2">
                   {DOCUMENT_TYPE_PRESETS.map((preset) => {
                     const isActive = selectedDocumentTypeId === preset.id;
                     return (
@@ -500,7 +499,7 @@ function Home() {
                         key={preset.id}
                         type="button"
                         onClick={() => applyDocumentType(preset.id)}
-                        className={`rounded-md border px-3 py-2.5 text-sm font-medium transition-colors ${
+                        className={`rounded-md border px-3 py-2.5 text-sm font-medium text-left transition-colors ${
                           isActive
                             ? "border-primary bg-primary/5 text-primary ring-1 ring-primary/30"
                             : "border-border text-foreground hover:bg-slate-50"
@@ -511,81 +510,187 @@ function Home() {
                     );
                   })}
                 </div>
-                <p className="text-xs text-muted-foreground">
-                  Loads trim/cleanup/padding for this document type. You can still edit values below.
-                </p>
               </div>
-              <label className="flex flex-col gap-2 text-sm">
-                First Page Letterhead
-                <select
-                  value={selectedTemplateId}
-                  onChange={(e) => setSelectedTemplateId(e.target.value)}
-                  className="border rounded px-3 py-2 bg-white"
-                >
-                  {(templates.length > 0
-                    ? templates
-                    : [{ id: "default", label: "Default Letterhead" }]
-                  ).map((template) => (
-                    <option key={template.id} value={template.id}>
-                      {template.label}
-                    </option>
-                  ))}
-                </select>
-              </label>
-              <div className="border rounded-md overflow-hidden bg-slate-50">
-                <div className="px-3 py-2 text-xs font-medium text-muted-foreground border-b bg-white">
-                  First Page Preview
-                </div>
-                <iframe
-                  key={`first-preview-${selectedTemplateId}`}
-                  src={`/api/letterhead/template-preview?templateId=${encodeURIComponent(selectedTemplateId)}&pageType=first`}
-                  title="First page letterhead preview"
-                  className="w-full h-[260px] bg-white"
+
+              <div
+                className={`relative group border-2 border-dashed rounded-xl p-5 transition-all duration-200 flex flex-col items-center justify-center text-center cursor-pointer ${
+                  isDragging
+                    ? "border-primary bg-primary/5"
+                    : file
+                    ? "border-border bg-slate-50 hover:bg-slate-100"
+                    : "border-border hover:border-primary/50 hover:bg-slate-50"
+                }`}
+                onDragOver={handleDragOver}
+                onDragLeave={handleDragLeave}
+                onDrop={handleDrop}
+                onClick={() => !file && fileInputRef.current?.click()}
+              >
+                <input
+                  type="file"
+                  ref={fileInputRef}
+                  onChange={handleFileChange}
+                  title="Upload a document"
+                  aria-label="Upload document"
+                  accept=".pdf,.rtf,.doc,.docx,.odt,application/pdf,application/rtf,text/rtf,application/msword,application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+                  className="hidden"
                 />
-              </div>
-              <label className="flex flex-col gap-2 text-sm">
-                Page 2+ Letterhead
-                <select
-                  value={selectedOtherPagesTemplateId}
-                  onChange={(e) => setSelectedOtherPagesTemplateId(e.target.value)}
-                  className="border rounded px-3 py-2 bg-white"
-                >
-                  <option value="same-as-first">Same as First Page</option>
-                  <option value="none">No Letterhead</option>
-                  {(templates.length > 0
-                    ? templates
-                    : [{ id: "default", label: "Default Letterhead" }]
-                  ).map((template) => (
-                    <option key={template.id} value={template.id}>
-                      {template.label}
-                    </option>
-                  ))}
-                </select>
-              </label>
-              <div className="border rounded-md overflow-hidden bg-slate-50">
-                <div className="px-3 py-2 text-xs font-medium text-muted-foreground border-b bg-white">
-                  Page 2+ Preview
-                </div>
-                {showOtherPagesPreview ? (
-                  <iframe
-                    key={`other-preview-${otherPagesTemplatePreviewId}`}
-                    src={`/api/letterhead/template-preview?templateId=${encodeURIComponent(otherPagesTemplatePreviewId)}&pageType=other`}
-                    title="Page 2 and onward letterhead preview"
-                    className="w-full h-[260px] bg-white"
-                  />
+
+                {!file ? (
+                  <>
+                    <div className="w-12 h-12 rounded-full bg-primary/10 flex items-center justify-center mb-3 text-primary">
+                      <UploadCloud className="w-6 h-6" />
+                    </div>
+                    <h3 className="text-sm font-semibold text-foreground mb-1">
+                      Click or drag your file here
+                    </h3>
+                    <p className="text-xs text-muted-foreground">
+                      PDF, RTF, DOC or DOCX · up to {MAX_FILE_SIZE_MB}MB
+                    </p>
+                  </>
                 ) : (
-                  <div className="w-full h-[260px] bg-white flex items-center justify-center text-sm text-muted-foreground px-4 text-center">
-                    No letterhead will be applied on page 2 and onward.
+                  <div className="flex items-center w-full gap-3 text-left bg-white p-3 rounded-lg shadow-sm border border-border">
+                    <div className="w-10 h-10 rounded-lg bg-primary/10 flex items-center justify-center text-primary shrink-0">
+                      <FileText className="w-5 h-5" />
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <p className="text-sm font-semibold text-foreground truncate">
+                        {file.name}
+                      </p>
+                      <p className="text-xs text-muted-foreground mt-0.5">
+                        {formatFileSize(file.size)}
+                      </p>
+                    </div>
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      className="shrink-0 text-muted-foreground hover:text-destructive hover:bg-destructive/10"
+                      onClick={removeFile}
+                      disabled={isProcessing}
+                    >
+                      <X className="w-5 h-5" />
+                    </Button>
                   </div>
                 )}
               </div>
+
+              <AnimatePresence>
+                {error && (
+                  <motion.div
+                    initial={{ opacity: 0, height: 0 }}
+                    animate={{ opacity: 1, height: "auto" }}
+                    exit={{ opacity: 0, height: 0 }}
+                    className="overflow-hidden"
+                  >
+                    <div className="flex items-center gap-2 text-destructive bg-destructive/10 p-3 rounded-md text-sm">
+                      <AlertCircle className="w-4 h-4 shrink-0" />
+                      <p>{error}</p>
+                    </div>
+                  </motion.div>
+                )}
+              </AnimatePresence>
+
+              <Button
+                size="lg"
+                className="w-full text-base font-semibold shadow-md"
+                disabled={!file || isProcessing}
+                onClick={handleApplyLetterhead}
+              >
+                {isProcessing ? (
+                  <>
+                    <Loader2 className="w-5 h-5 mr-2 animate-spin" />
+                    Processing...
+                  </>
+                ) : (
+                  "Apply Letterhead"
+                )}
+              </Button>
+
+              <div className="border rounded-md">
+                <button
+                  type="button"
+                  onClick={() => setShowLetterheadSettings((v) => !v)}
+                  className="w-full px-3 py-2 text-left text-sm font-medium hover:bg-slate-50 flex items-center justify-between"
+                >
+                  <span>Letterhead Templates</span>
+                  <span>{showLetterheadSettings ? "Hide" : "Show"}</span>
+                </button>
+                {showLetterheadSettings && (
+                  <div className="p-3 space-y-3 text-sm border-t">
+                    <label className="flex flex-col gap-2">
+                      First Page Letterhead
+                      <select
+                        value={selectedTemplateId}
+                        onChange={(e) => setSelectedTemplateId(e.target.value)}
+                        className="border rounded px-3 py-2 bg-white"
+                      >
+                        {(templates.length > 0
+                          ? templates
+                          : [{ id: "default", label: "Default Letterhead" }]
+                        ).map((template) => (
+                          <option key={template.id} value={template.id}>
+                            {template.label}
+                          </option>
+                        ))}
+                      </select>
+                    </label>
+                    <div className="border rounded-md overflow-hidden bg-slate-50">
+                      <div className="px-3 py-2 text-xs font-medium text-muted-foreground border-b bg-white">
+                        First Page Preview
+                      </div>
+                      <iframe
+                        key={`first-preview-${selectedTemplateId}`}
+                        src={`/api/letterhead/template-preview?templateId=${encodeURIComponent(selectedTemplateId)}&pageType=first`}
+                        title="First page letterhead preview"
+                        className="w-full h-[180px] bg-white"
+                      />
+                    </div>
+                    <label className="flex flex-col gap-2">
+                      Page 2+ Letterhead
+                      <select
+                        value={selectedOtherPagesTemplateId}
+                        onChange={(e) => setSelectedOtherPagesTemplateId(e.target.value)}
+                        className="border rounded px-3 py-2 bg-white"
+                      >
+                        <option value="same-as-first">Same as First Page</option>
+                        <option value="none">No Letterhead</option>
+                        {(templates.length > 0
+                          ? templates
+                          : [{ id: "default", label: "Default Letterhead" }]
+                        ).map((template) => (
+                          <option key={template.id} value={template.id}>
+                            {template.label}
+                          </option>
+                        ))}
+                      </select>
+                    </label>
+                    <div className="border rounded-md overflow-hidden bg-slate-50">
+                      <div className="px-3 py-2 text-xs font-medium text-muted-foreground border-b bg-white">
+                        Page 2+ Preview
+                      </div>
+                      {showOtherPagesPreview ? (
+                        <iframe
+                          key={`other-preview-${otherPagesTemplatePreviewId}`}
+                          src={`/api/letterhead/template-preview?templateId=${encodeURIComponent(otherPagesTemplatePreviewId)}&pageType=other`}
+                          title="Page 2 and onward letterhead preview"
+                          className="w-full h-[180px] bg-white"
+                        />
+                      ) : (
+                        <div className="w-full h-[180px] bg-white flex items-center justify-center text-sm text-muted-foreground px-4 text-center">
+                          No letterhead will be applied on page 2 and onward.
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                )}
+              </div>
+
               <div className="border rounded-md">
                 <button
                   type="button"
                   onClick={() => setShowTuneSettings((v) => !v)}
                   className="w-full px-3 py-2 text-left text-sm font-medium hover:bg-slate-50 flex items-center justify-between"
                 >
-                  <span>Advanced Trim & Cleanup Settings</span>
+                  <span>Trim & Cleanup Settings</span>
                   <span>{showTuneSettings ? "Hide" : "Show"}</span>
                 </button>
                 {showTuneSettings && (
@@ -638,129 +743,14 @@ function Home() {
               </div>
             </CardContent>
           </Card>
-          <div>
-            <AnimatePresence mode="wait">
-              <motion.div
-                key="upload-state"
-                initial={{ opacity: 0, y: 10 }}
-                animate={{ opacity: 1, y: 0 }}
-                exit={{ opacity: 0, y: -10 }}
-                transition={{ duration: 0.3 }}
-              >
-                <Card className="shadow-lg border-border/50 overflow-hidden bg-white">
-                  <CardContent className="p-8">
-                      {/* Dropzone */}
-                      <div
-                        className={`relative group border-2 border-dashed rounded-xl p-10 transition-all duration-200 flex flex-col items-center justify-center text-center cursor-pointer ${
-                          isDragging
-                            ? "border-primary bg-primary/5"
-                            : file
-                            ? "border-border bg-slate-50 hover:bg-slate-100"
-                            : "border-border hover:border-primary/50 hover:bg-slate-50"
-                        }`}
-                        onDragOver={handleDragOver}
-                        onDragLeave={handleDragLeave}
-                        onDrop={handleDrop}
-                        onClick={() => !file && fileInputRef.current?.click()}
-                      >
-                        <input
-                          type="file"
-                          ref={fileInputRef}
-                          onChange={handleFileChange}
-                          title="Upload a document"
-                          aria-label="Upload document"
-                          accept=".pdf,.rtf,.doc,.docx,.odt,application/pdf,application/rtf,text/rtf,application/msword,application/vnd.openxmlformats-officedocument.wordprocessingml.document"
-                          className="hidden"
-                        />
 
-                        {!file ? (
-                          <>
-                            <div className="w-16 h-16 rounded-full bg-primary/10 flex items-center justify-center mb-4 text-primary group-hover:scale-105 transition-transform">
-                              <UploadCloud className="w-8 h-8" />
-                            </div>
-                            <h3 className="text-lg font-semibold text-foreground mb-1">
-                              Click or drag your file here
-                            </h3>
-                            <p className="text-sm text-muted-foreground">
-                              PDF, RTF, DOC or DOCX &middot; up to {MAX_FILE_SIZE_MB}MB
-                            </p>
-                          </>
-                        ) : (
-                          <div className="flex items-center w-full gap-4 text-left bg-white p-4 rounded-lg shadow-sm border border-border">
-                            <div className="w-12 h-12 rounded-lg bg-primary/10 flex items-center justify-center text-primary shrink-0">
-                              <FileText className="w-6 h-6" />
-                            </div>
-                            <div className="flex-1 min-w-0">
-                              <p className="text-sm font-semibold text-foreground truncate">
-                                {file.name}
-                              </p>
-                              <p className="text-xs text-muted-foreground mt-0.5">
-                                {formatFileSize(file.size)}
-                              </p>
-                            </div>
-                            <Button
-                              variant="ghost"
-                              size="icon"
-                              className="shrink-0 text-muted-foreground hover:text-destructive hover:bg-destructive/10"
-                              onClick={removeFile}
-                              disabled={isProcessing}
-                            >
-                              <X className="w-5 h-5" />
-                            </Button>
-                          </div>
-                        )}
-                      </div>
-
-                      {/* Error Message */}
-                      <AnimatePresence>
-                        {error && (
-                          <motion.div
-                            initial={{ opacity: 0, height: 0 }}
-                            animate={{ opacity: 1, height: "auto" }}
-                            exit={{ opacity: 0, height: 0 }}
-                            className="mt-4 overflow-hidden"
-                          >
-                            <div className="flex items-center gap-2 text-destructive bg-destructive/10 p-3 rounded-md text-sm">
-                              <AlertCircle className="w-4 h-4 shrink-0" />
-                              <p>{error}</p>
-                            </div>
-                          </motion.div>
-                        )}
-                      </AnimatePresence>
-
-                      {/* Action Button */}
-                      <div className="mt-8">
-                        <Button
-                          size="lg"
-                          className="w-full text-base font-semibold shadow-md"
-                          disabled={!file || isProcessing}
-                          onClick={handleApplyLetterhead}
-                        >
-                          {isProcessing ? (
-                            <>
-                              <Loader2 className="w-5 h-5 mr-2 animate-spin" />
-                              Processing Document...
-                            </>
-                          ) : (
-                            "Apply Letterhead"
-                          )}
-                        </Button>
-                      </div>
-                    </CardContent>
-                  </Card>
-                </motion.div>
-            </AnimatePresence>
-          </div>
-        </div>
-
-        {file && (
-          <Card className="w-full mt-6 border-border/50 bg-white">
-            <CardContent className="p-4 space-y-4">
+          <Card className="border-border/50 bg-white min-h-[70vh]">
+            <CardContent className="p-4 space-y-4 h-full">
               <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
                 <div>
-                  <h2 className="text-sm font-semibold text-foreground">Live Preview</h2>
+                  <h2 className="text-base font-semibold text-foreground">Live Preview</h2>
                   <p className="text-xs text-muted-foreground mt-0.5">
-                    Compare your uploaded file with the processed result — scroll to see all pages.
+                    Uploaded vs processed — scroll to see all pages.
                   </p>
                 </div>
                 {livePreviewLoading && (
@@ -778,46 +768,51 @@ function Home() {
                 </div>
               )}
 
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                <div className="border rounded-md overflow-hidden bg-slate-50">
-                  <div className="px-3 py-2 text-xs font-medium text-muted-foreground border-b bg-white">
-                    Uploaded
-                  </div>
-                  {sourcePreviewUrl ? (
-                    <iframe
-                      key={`uploaded-${sourcePreviewUrl}`}
-                      src={sourcePreviewUrl}
-                      title="Uploaded document preview"
-                      className="w-full h-[600px] bg-white"
-                    />
-                  ) : (
-                    <div className="w-full h-[600px] bg-white flex items-center justify-center text-sm text-muted-foreground px-4 text-center">
-                      Preview available for PDF uploads. Processed preview still updates below.
-                    </div>
-                  )}
+              {!file ? (
+                <div className="border rounded-md bg-slate-50 h-[calc(100vh-280px)] min-h-[520px] flex items-center justify-center text-sm text-muted-foreground px-6 text-center">
+                  Upload a document to see the live before/after preview here.
                 </div>
-                <div className="border rounded-md overflow-hidden bg-slate-50">
-                  <div className="px-3 py-2 text-xs font-medium text-muted-foreground border-b bg-white">
-                    Processed
-                  </div>
-                  {livePreviewUrl ? (
-                    <iframe
-                      key={`processed-${livePreviewUrl}`}
-                      src={livePreviewUrl}
-                      title="Processed document preview"
-                      className="w-full h-[600px] bg-white"
-                    />
-                  ) : (
-                    <div className="w-full h-[600px] bg-white flex items-center justify-center text-sm text-muted-foreground">
-                      {livePreviewLoading ? "Generating preview…" : "Waiting for preview…"}
+              ) : (
+                <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+                  <div className="border rounded-md overflow-hidden bg-slate-50">
+                    <div className="px-3 py-2 text-xs font-medium text-muted-foreground border-b bg-white">
+                      Uploaded
                     </div>
-                  )}
+                    {sourcePreviewUrl ? (
+                      <iframe
+                        key={`uploaded-${sourcePreviewUrl}`}
+                        src={sourcePreviewUrl}
+                        title="Uploaded document preview"
+                        className="w-full h-[calc(100vh-300px)] min-h-[520px] bg-white"
+                      />
+                    ) : (
+                      <div className="w-full h-[calc(100vh-300px)] min-h-[520px] bg-white flex items-center justify-center text-sm text-muted-foreground px-4 text-center">
+                        Preview available for PDF uploads.
+                      </div>
+                    )}
+                  </div>
+                  <div className="border rounded-md overflow-hidden bg-slate-50">
+                    <div className="px-3 py-2 text-xs font-medium text-muted-foreground border-b bg-white">
+                      Processed
+                    </div>
+                    {livePreviewUrl ? (
+                      <iframe
+                        key={`processed-${livePreviewUrl}`}
+                        src={livePreviewUrl}
+                        title="Processed document preview"
+                        className="w-full h-[calc(100vh-300px)] min-h-[520px] bg-white"
+                      />
+                    ) : (
+                      <div className="w-full h-[calc(100vh-300px)] min-h-[520px] bg-white flex items-center justify-center text-sm text-muted-foreground">
+                        {livePreviewLoading ? "Generating preview…" : "Waiting for preview…"}
+                      </div>
+                    )}
+                  </div>
                 </div>
-              </div>
+              )}
             </CardContent>
           </Card>
-        )}
-        </>
+        </div>
         )}
       </main>
 
