@@ -417,8 +417,8 @@ function Home() {
     <div className="min-h-screen flex flex-col bg-background selection:bg-primary/20">
       {/* Header Strip */}
       <header className="bg-white border-b border-border sticky top-0 z-10 shadow-sm">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 h-20 flex items-center justify-between">
-          <div className="flex items-center gap-4">
+        <div className="max-w-[1600px] mx-auto px-4 sm:px-6 lg:px-8 h-20 flex items-center justify-between gap-4">
+          <div className="flex items-center gap-4 shrink-0">
             <img src="/logo.png" alt="Tax Deliver Logo" className="h-12 w-12 rounded-md object-contain" />
             <div className="flex flex-col">
               <span className="text-xl font-bold tracking-tight text-[#2d6bf0] leading-none">TAX DELIVER</span>
@@ -427,19 +427,20 @@ function Home() {
               </span>
             </div>
           </div>
+          <div className="flex-1 text-center min-w-0 px-2">
+            <h1 className="text-lg sm:text-xl font-extrabold text-foreground truncate">
+              Tax Deliver Letterhead Tool
+            </h1>
+            <p className="text-muted-foreground text-xs mt-0.5 hidden sm:block">
+              Pick a document type, upload your file, and review the live result.
+            </p>
+          </div>
+          <div className="w-[180px] shrink-0 hidden md:block" aria-hidden="true" />
         </div>
       </header>
 
       {/* Main Content */}
       <main className="flex-1 max-w-[1600px] w-full mx-auto px-4 sm:px-6 lg:px-8 py-6 flex flex-col">
-        <div className="mb-6 w-full text-center">
-          <h1 className="text-2xl sm:text-3xl font-extrabold text-foreground">
-            Tax Deliver Letterhead Tool
-          </h1>
-          <p className="text-muted-foreground text-sm mt-1">
-            Pick a document type, upload your file, and review the live result.
-          </p>
-        </div>
 
         {successData ? (
           <motion.div
