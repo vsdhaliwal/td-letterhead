@@ -89,7 +89,6 @@ function Home() {
     formData.append("bottomFooterCleanupOtherPages", String(tune.bottomFooterCleanupOtherPages));
     if (options?.preview) {
       formData.append("preview", "true");
-      formData.append("previewMaxPages", "2");
     }
     return formData;
   };
@@ -627,19 +626,6 @@ function Home() {
                         )}
                       </div>
 
-                      {sourcePreviewUrl && (
-                        <div className="mt-4 border rounded-md overflow-hidden bg-slate-50">
-                          <div className="px-3 py-2 text-xs font-medium text-muted-foreground border-b bg-white">
-                            Uploaded Document Preview
-                          </div>
-                          <iframe
-                            src={sourcePreviewUrl}
-                            title="Uploaded document preview"
-                            className="w-full h-[360px] bg-white"
-                          />
-                        </div>
-                      )}
-
                       {/* Error Message */}
                       <AnimatePresence>
                         {error && (
@@ -685,11 +671,11 @@ function Home() {
         {file && (
           <Card className="w-full mt-6 border-border/50 bg-white">
             <CardContent className="p-4 space-y-4">
-              <div className="flex items-center justify-between gap-3">
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
                 <div>
                   <h2 className="text-sm font-semibold text-foreground">Live Preview</h2>
                   <p className="text-xs text-muted-foreground mt-0.5">
-                    Updates automatically when you change templates or settings (pages 1–2).
+                    Compare your uploaded file with the processed result — scroll to see all pages.
                   </p>
                 </div>
                 {livePreviewLoading && (
@@ -707,36 +693,42 @@ function Home() {
                 </div>
               )}
 
-              {livePreviewUrl ? (
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                  <div className="border rounded-md overflow-hidden bg-slate-50">
-                    <div className="px-3 py-2 text-xs font-medium text-muted-foreground border-b bg-white">
-                      Page 1 Result
-                    </div>
-                    <iframe
-                      key={`live-p1-${livePreviewUrl}`}
-                      src={`${livePreviewUrl}#page=1`}
-                      title="Live preview page 1"
-                      className="w-full h-[420px] bg-white"
-                    />
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div className="border rounded-md overflow-hidden bg-slate-50">
+                  <div className="px-3 py-2 text-xs font-medium text-muted-foreground border-b bg-white">
+                    Uploaded
                   </div>
-                  <div className="border rounded-md overflow-hidden bg-slate-50">
-                    <div className="px-3 py-2 text-xs font-medium text-muted-foreground border-b bg-white">
-                      Page 2 Result
-                    </div>
+                  {sourcePreviewUrl ? (
                     <iframe
-                      key={`live-p2-${livePreviewUrl}`}
-                      src={`${livePreviewUrl}#page=2`}
-                      title="Live preview page 2"
-                      className="w-full h-[420px] bg-white"
+                      key={`uploaded-${sourcePreviewUrl}`}
+                      src={sourcePreviewUrl}
+                      title="Uploaded document preview"
+                      className="w-full h-[600px] bg-white"
                     />
+                  ) : (
+                    <div className="w-full h-[600px] bg-white flex items-center justify-center text-sm text-muted-foreground px-4 text-center">
+                      Preview available for PDF uploads. Processed preview still updates below.
+                    </div>
+                  )}
+                </div>
+                <div className="border rounded-md overflow-hidden bg-slate-50">
+                  <div className="px-3 py-2 text-xs font-medium text-muted-foreground border-b bg-white">
+                    Processed
                   </div>
+                  {livePreviewUrl ? (
+                    <iframe
+                      key={`processed-${livePreviewUrl}`}
+                      src={livePreviewUrl}
+                      title="Processed document preview"
+                      className="w-full h-[600px] bg-white"
+                    />
+                  ) : (
+                    <div className="w-full h-[600px] bg-white flex items-center justify-center text-sm text-muted-foreground">
+                      {livePreviewLoading ? "Generating preview…" : "Waiting for preview…"}
+                    </div>
+                  )}
                 </div>
-              ) : (
-                <div className="border rounded-md bg-slate-50 h-[200px] flex items-center justify-center text-sm text-muted-foreground">
-                  {livePreviewLoading ? "Generating preview…" : "Upload a file to see the live preview."}
-                </div>
-              )}
+              </div>
             </CardContent>
           </Card>
         )}
