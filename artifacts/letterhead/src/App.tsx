@@ -42,6 +42,9 @@ function Home() {
   const [selectedOtherPagesTemplateId, setSelectedOtherPagesTemplateId] = useState("same-as-first");
   const [showTuneSettings, setShowTuneSettings] = useState(false);
   const [sourcePreviewUrl, setSourcePreviewUrl] = useState<string | null>(null);
+  const [livePreviewUrl, setLivePreviewUrl] = useState<string | null>(null);
+  const [livePreviewLoading, setLivePreviewLoading] = useState(false);
+  const [livePreviewError, setLivePreviewError] = useState<string | null>(null);
   const [tune, setTune] = useState<TuneSettings>({
     topTrimFirstPage: 92,
     topTrimOtherPages: 30,
@@ -59,8 +62,97 @@ function Home() {
   useEffect(() => {
     return () => {
       if (successData?.url) URL.revokeObjectURL(successData.url);
+      if (livePreviewUrl) URL.revokeObjectURL(livePreviewUrl);
     };
-  }, [successData]);
+  }, [successData, livePreviewUrl]);
+
+  const buildFormData = (options?: { preview?: boolean }) => {
+    if (!file) return null;
+    const formData = new FormData();
+    formData.append("file", file);
+    formData.append("templateId", selectedTemplateId);
+    formData.append(
+      "otherPagesTemplateId",
+      selectedOtherPagesTemplateId === "same-as-first"
+        ? ""
+        : selectedOtherPagesTemplateId,
+    );
+    formData.append("contentPaddingTopFirstPage", String(tune.contentPaddingTopFirstPage));
+    formData.append("contentPaddingTopOtherPages", String(tune.contentPaddingTopOtherPages));
+    formData.append("contentPaddingBottomFirstPage", String(tune.contentPaddingBottomFirstPage));
+    formData.append("contentPaddingBottomOtherPages", String(tune.contentPaddingBottomOtherPages));
+    formData.append("topTrimFirstPage", String(tune.topTrimFirstPage));
+    formData.append("topTrimOtherPages", String(tune.topTrimOtherPages));
+    formData.append("topHeaderCleanupFirstPage", String(tune.topHeaderCleanupFirstPage));
+    formData.append("topHeaderCleanupOtherPages", String(tune.topHeaderCleanupOtherPages));
+    formData.append("bottomFooterCleanupFirstPage", String(tune.bottomFooterCleanupFirstPage));
+    formData.append("bottomFooterCleanupOtherPages", String(tune.bottomFooterCleanupOtherPages));
+    if (options?.preview) {
+      formData.append("preview", "true");
+      formData.append("previewMaxPages", "2");
+    }
+    return formData;
+  };
+
+  useEffect(() => {
+    if (!file || successData || isProcessing) {
+      return;
+    }
+
+    const controller = new AbortController();
+    const timer = window.setTimeout(async () => {
+      const formData = buildFormData({ preview: true });
+      if (!formData) return;
+
+      setLivePreviewLoading(true);
+      setLivePreviewError(null);
+
+      try {
+        const response = await fetch("/api/letterhead/apply", {
+          method: "POST",
+          body: formData,
+          signal: controller.signal,
+        });
+
+        if (!response.ok) {
+          let errorMessage = "Could not generate live preview.";
+          try {
+            const errData = await response.json();
+            if (errData.error) errorMessage = errData.error;
+          } catch {
+            // Ignore parsing error
+          }
+          throw new Error(errorMessage);
+        }
+
+        const blob = await response.blob();
+        const url = URL.createObjectURL(blob);
+        setLivePreviewUrl((prev) => {
+          if (prev) URL.revokeObjectURL(prev);
+          return url;
+        });
+      } catch (err: unknown) {
+        if (err instanceof DOMException && err.name === "AbortError") return;
+        setLivePreviewError(
+          err instanceof Error ? err.message : "Could not generate live preview.",
+        );
+      } finally {
+        setLivePreviewLoading(false);
+      }
+    }, 700);
+
+    return () => {
+      window.clearTimeout(timer);
+      controller.abort();
+    };
+  }, [
+    file,
+    successData,
+    isProcessing,
+    selectedTemplateId,
+    selectedOtherPagesTemplateId,
+    tune,
+  ]);
 
   useEffect(() => {
     if (!file) {
@@ -154,6 +246,11 @@ function Home() {
     }
     setFile(selectedFile);
     setSuccessData(null);
+    setLivePreviewUrl((prev) => {
+      if (prev) URL.revokeObjectURL(prev);
+      return null;
+    });
+    setLivePreviewError(null);
   };
 
   const handleDrop = (e: DragEvent<HTMLDivElement>) => {
@@ -173,8 +270,13 @@ function Home() {
   const removeFile = (e: MouseEvent) => {
     e.stopPropagation();
     setFile(null);
-    setError(null);
     setSuccessData(null);
+    setError(null);
+    setLivePreviewUrl((prev) => {
+      if (prev) URL.revokeObjectURL(prev);
+      return null;
+    });
+    setLivePreviewError(null);
     if (fileInputRef.current) {
       fileInputRef.current.value = "";
     }
@@ -191,29 +293,12 @@ function Home() {
   const handleApplyLetterhead = async () => {
     if (!file) return;
 
+    const formData = buildFormData();
+    if (!formData) return;
+
     setIsProcessing(true);
     setError(null);
     setSuccessData(null);
-
-    const formData = new FormData();
-    formData.append("file", file);
-    formData.append("templateId", selectedTemplateId);
-    formData.append(
-      "otherPagesTemplateId",
-      selectedOtherPagesTemplateId === "same-as-first"
-        ? ""
-        : selectedOtherPagesTemplateId,
-    );
-    formData.append("contentPaddingTopFirstPage", String(tune.contentPaddingTopFirstPage));
-    formData.append("contentPaddingTopOtherPages", String(tune.contentPaddingTopOtherPages));
-    formData.append("contentPaddingBottomFirstPage", String(tune.contentPaddingBottomFirstPage));
-    formData.append("contentPaddingBottomOtherPages", String(tune.contentPaddingBottomOtherPages));
-    formData.append("topTrimFirstPage", String(tune.topTrimFirstPage));
-    formData.append("topTrimOtherPages", String(tune.topTrimOtherPages));
-    formData.append("topHeaderCleanupFirstPage", String(tune.topHeaderCleanupFirstPage));
-    formData.append("topHeaderCleanupOtherPages", String(tune.topHeaderCleanupOtherPages));
-    formData.append("bottomFooterCleanupFirstPage", String(tune.bottomFooterCleanupFirstPage));
-    formData.append("bottomFooterCleanupOtherPages", String(tune.bottomFooterCleanupOtherPages));
 
     try {
       const response = await fetch(`/api/letterhead/apply`, {
@@ -253,6 +338,11 @@ function Home() {
     setFile(null);
     setSuccessData(null);
     setError(null);
+    setLivePreviewUrl((prev) => {
+      if (prev) URL.revokeObjectURL(prev);
+      return null;
+    });
+    setLivePreviewError(null);
     if (fileInputRef.current) {
       fileInputRef.current.value = "";
     }
@@ -337,6 +427,7 @@ function Home() {
             </Card>
           </motion.div>
         ) : (
+        <>
         <div className="w-full grid grid-cols-1 lg:grid-cols-2 gap-6 items-start">
           <Card className="border-border/50 bg-white">
             <CardContent className="p-4 space-y-4">
@@ -590,6 +681,66 @@ function Home() {
             </AnimatePresence>
           </div>
         </div>
+
+        {file && (
+          <Card className="w-full mt-6 border-border/50 bg-white">
+            <CardContent className="p-4 space-y-4">
+              <div className="flex items-center justify-between gap-3">
+                <div>
+                  <h2 className="text-sm font-semibold text-foreground">Live Preview</h2>
+                  <p className="text-xs text-muted-foreground mt-0.5">
+                    Updates automatically when you change templates or settings (pages 1–2).
+                  </p>
+                </div>
+                {livePreviewLoading && (
+                  <div className="flex items-center gap-2 text-xs text-muted-foreground">
+                    <Loader2 className="w-4 h-4 animate-spin" />
+                    Updating…
+                  </div>
+                )}
+              </div>
+
+              {livePreviewError && (
+                <div className="flex items-center gap-2 text-destructive bg-destructive/10 p-3 rounded-md text-sm">
+                  <AlertCircle className="w-4 h-4 shrink-0" />
+                  <p>{livePreviewError}</p>
+                </div>
+              )}
+
+              {livePreviewUrl ? (
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <div className="border rounded-md overflow-hidden bg-slate-50">
+                    <div className="px-3 py-2 text-xs font-medium text-muted-foreground border-b bg-white">
+                      Page 1 Result
+                    </div>
+                    <iframe
+                      key={`live-p1-${livePreviewUrl}`}
+                      src={`${livePreviewUrl}#page=1`}
+                      title="Live preview page 1"
+                      className="w-full h-[420px] bg-white"
+                    />
+                  </div>
+                  <div className="border rounded-md overflow-hidden bg-slate-50">
+                    <div className="px-3 py-2 text-xs font-medium text-muted-foreground border-b bg-white">
+                      Page 2 Result
+                    </div>
+                    <iframe
+                      key={`live-p2-${livePreviewUrl}`}
+                      src={`${livePreviewUrl}#page=2`}
+                      title="Live preview page 2"
+                      className="w-full h-[420px] bg-white"
+                    />
+                  </div>
+                </div>
+              ) : (
+                <div className="border rounded-md bg-slate-50 h-[200px] flex items-center justify-center text-sm text-muted-foreground">
+                  {livePreviewLoading ? "Generating preview…" : "Upload a file to see the live preview."}
+                </div>
+              )}
+            </CardContent>
+          </Card>
+        )}
+        </>
         )}
       </main>
 

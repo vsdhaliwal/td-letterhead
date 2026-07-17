@@ -190,6 +190,7 @@ async function applyLetterhead(
   tune: LetterheadTune,
   selectedTemplateId?: string | null,
   selectedOtherPagesTemplateId?: string | null,
+  maxPages?: number,
 ): Promise<Uint8Array> {
   const sourceDoc = await PDFDocument.load(sourcePdfBuffer, {
     ignoreEncryption: true,
@@ -218,7 +219,11 @@ async function applyLetterhead(
     [otherPagesEmbeddedTemplate] = await outDoc.embedPdf(otherPagesTemplateBytes, [0]);
   }
 
-  for (let pageIndex = 0; pageIndex < sourcePageCount; pageIndex++) {
+  const pagesToProcess = maxPages
+    ? Math.min(sourcePageCount, maxPages)
+    : sourcePageCount;
+
+  for (let pageIndex = 0; pageIndex < pagesToProcess; pageIndex++) {
     const sourcePage = sourceDoc.getPage(pageIndex);
     const sourceWidth = sourcePage.getWidth();
     const sourceHeight = sourcePage.getHeight();
@@ -317,6 +322,10 @@ export async function POST(request: Request) {
         ? (formData.get("otherPagesTemplateId") as string)
         : null;
     const file = formData.get("file");
+    const isPreview = formData.get("preview") === "true";
+    const previewMaxPages = isPreview
+      ? Math.min(10, Math.max(1, Number(formData.get("previewMaxPages")) || 2))
+      : undefined;
 
     if (!(file instanceof File)) {
       return NextResponse.json({ error: "Please upload a file." }, { status: 400 });
@@ -376,6 +385,7 @@ export async function POST(request: Request) {
         tune,
         selectedTemplateId,
         selectedOtherPagesTemplateId,
+        previewMaxPages,
       );
     } catch (err) {
       const message =
@@ -391,8 +401,11 @@ export async function POST(request: Request) {
       status: 200,
       headers: {
         "Content-Type": "application/pdf",
-        "Content-Disposition": `attachment; filename="${downloadName}"`,
+        "Content-Disposition": isPreview
+          ? "inline"
+          : `attachment; filename="${downloadName}"`,
         "Content-Length": out.length.toString(),
+        "Cache-Control": "no-store",
       },
     });
   } catch {
