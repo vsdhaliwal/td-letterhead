@@ -9,12 +9,12 @@ import { resolveTemplateById } from "../../../../lib/letterhead/templates";
 
 const MAX_FILE_SIZE_BYTES = 25 * 1024 * 1024;
 const ACCEPTED_EXTS = new Set([".pdf", ".rtf", ".doc", ".docx", ".odt"]);
-const TOP_TRIM_FIRST_PAGE = 92;
+const TOP_TRIM_FIRST_PAGE = 0;
 const TOP_TRIM_OTHER_PAGES = 30;
-const TOP_HEADER_CLEANUP_HEIGHT_FIRST_PAGE = 56;
-const TOP_HEADER_CLEANUP_HEIGHT_OTHER_PAGES = 64;
+const TOP_HEADER_CLEANUP_HEIGHT_FIRST_PAGE = 20;
+const TOP_HEADER_CLEANUP_HEIGHT_OTHER_PAGES = 0;
 const BOTTOM_FOOTER_CLEANUP_HEIGHT_FIRST_PAGE = 64;
-const BOTTOM_FOOTER_CLEANUP_HEIGHT_OTHER_PAGES = 84;
+const BOTTOM_FOOTER_CLEANUP_HEIGHT_OTHER_PAGES = 64;
 const MIN_TUNE = 0;
 const MAX_TUNE = 200;
 
@@ -180,8 +180,8 @@ function parseTune(formData: FormData): LetterheadTune {
     ),
     contentPaddingTopFirstPage: getNum("contentPaddingTopFirstPage", 0),
     contentPaddingTopOtherPages: getNum("contentPaddingTopOtherPages", 0),
-    contentPaddingBottomFirstPage: getNum("contentPaddingBottomFirstPage", 0),
-    contentPaddingBottomOtherPages: getNum("contentPaddingBottomOtherPages", 0),
+    contentPaddingBottomFirstPage: getNum("contentPaddingBottomFirstPage", 10),
+    contentPaddingBottomOtherPages: getNum("contentPaddingBottomOtherPages", 25),
   };
 }
 

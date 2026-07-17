@@ -46,16 +46,16 @@ function Home() {
   const [livePreviewLoading, setLivePreviewLoading] = useState(false);
   const [livePreviewError, setLivePreviewError] = useState<string | null>(null);
   const [tune, setTune] = useState<TuneSettings>({
-    topTrimFirstPage: 92,
+    topTrimFirstPage: 0,
     topTrimOtherPages: 30,
-    topHeaderCleanupFirstPage: 56,
-    topHeaderCleanupOtherPages: 64,
+    topHeaderCleanupFirstPage: 20,
+    topHeaderCleanupOtherPages: 0,
     bottomFooterCleanupFirstPage: 64,
-    bottomFooterCleanupOtherPages: 84,
+    bottomFooterCleanupOtherPages: 64,
     contentPaddingTopFirstPage: 0,
     contentPaddingTopOtherPages: 0,
-    contentPaddingBottomFirstPage: 0,
-    contentPaddingBottomOtherPages: 0,
+    contentPaddingBottomFirstPage: 10,
+    contentPaddingBottomOtherPages: 25,
   });
   const fileInputRef = useRef<HTMLInputElement>(null);
 
