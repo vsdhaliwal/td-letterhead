@@ -26,6 +26,67 @@ type TuneSettings = {
   contentPaddingBottomOtherPages: number;
 };
 
+type DocumentTypePreset = {
+  id: string;
+  label: string;
+  values: TuneSettings;
+};
+
+const DOCUMENT_TYPE_PRESETS: DocumentTypePreset[] = [
+  {
+    id: "computation",
+    label: "Computation",
+    values: {
+      topTrimFirstPage: 0,
+      topTrimOtherPages: 30,
+      topHeaderCleanupFirstPage: 20,
+      topHeaderCleanupOtherPages: 0,
+      bottomFooterCleanupFirstPage: 64,
+      bottomFooterCleanupOtherPages: 64,
+      contentPaddingTopFirstPage: 80,
+      contentPaddingTopOtherPages: 0,
+      contentPaddingBottomFirstPage: 10,
+      contentPaddingBottomOtherPages: 25,
+    },
+  },
+  {
+    id: "trademark-status",
+    label: "Trademark Status",
+    values: {
+      topTrimFirstPage: 90,
+      topTrimOtherPages: 0,
+      topHeaderCleanupFirstPage: 0,
+      topHeaderCleanupOtherPages: 0,
+      bottomFooterCleanupFirstPage: 0,
+      bottomFooterCleanupOtherPages: 0,
+      contentPaddingTopFirstPage: 0,
+      contentPaddingTopOtherPages: 0,
+      contentPaddingBottomFirstPage: 50,
+      contentPaddingBottomOtherPages: 40,
+    },
+  },
+  {
+    id: "trademark-report",
+    label: "Trademark Report",
+    // TODO: replace with Trademark Report values when provided
+    values: {
+      topTrimFirstPage: 0,
+      topTrimOtherPages: 0,
+      topHeaderCleanupFirstPage: 0,
+      topHeaderCleanupOtherPages: 0,
+      bottomFooterCleanupFirstPage: 0,
+      bottomFooterCleanupOtherPages: 0,
+      contentPaddingTopFirstPage: 0,
+      contentPaddingTopOtherPages: 0,
+      contentPaddingBottomFirstPage: 0,
+      contentPaddingBottomOtherPages: 0,
+    },
+  },
+];
+
+const DEFAULT_DOCUMENT_TYPE = DOCUMENT_TYPE_PRESETS[0];
+const DEFAULT_TUNE = DEFAULT_DOCUMENT_TYPE.values;
+
 type TemplateOption = {
   id: string;
   label: string;
@@ -45,19 +106,18 @@ function Home() {
   const [livePreviewUrl, setLivePreviewUrl] = useState<string | null>(null);
   const [livePreviewLoading, setLivePreviewLoading] = useState(false);
   const [livePreviewError, setLivePreviewError] = useState<string | null>(null);
-  const [tune, setTune] = useState<TuneSettings>({
-    topTrimFirstPage: 0,
-    topTrimOtherPages: 30,
-    topHeaderCleanupFirstPage: 20,
-    topHeaderCleanupOtherPages: 0,
-    bottomFooterCleanupFirstPage: 64,
-    bottomFooterCleanupOtherPages: 64,
-    contentPaddingTopFirstPage: 50,
-    contentPaddingTopOtherPages: 0,
-    contentPaddingBottomFirstPage: 10,
-    contentPaddingBottomOtherPages: 25,
-  });
+  const [selectedDocumentTypeId, setSelectedDocumentTypeId] = useState(
+    DEFAULT_DOCUMENT_TYPE.id,
+  );
+  const [tune, setTune] = useState<TuneSettings>(DEFAULT_TUNE);
   const fileInputRef = useRef<HTMLInputElement>(null);
+
+  const applyDocumentType = (documentTypeId: string) => {
+    const preset = DOCUMENT_TYPE_PRESETS.find((item) => item.id === documentTypeId);
+    if (!preset) return;
+    setSelectedDocumentTypeId(preset.id);
+    setTune({ ...preset.values });
+  };
 
   useEffect(() => {
     return () => {
@@ -430,6 +490,31 @@ function Home() {
         <div className="w-full grid grid-cols-1 lg:grid-cols-2 gap-6 items-start">
           <Card className="border-border/50 bg-white">
             <CardContent className="p-4 space-y-4">
+              <div className="space-y-2">
+                <span className="text-sm font-medium text-foreground">Document Type</span>
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
+                  {DOCUMENT_TYPE_PRESETS.map((preset) => {
+                    const isActive = selectedDocumentTypeId === preset.id;
+                    return (
+                      <button
+                        key={preset.id}
+                        type="button"
+                        onClick={() => applyDocumentType(preset.id)}
+                        className={`rounded-md border px-3 py-2.5 text-sm font-medium transition-colors ${
+                          isActive
+                            ? "border-primary bg-primary/5 text-primary ring-1 ring-primary/30"
+                            : "border-border text-foreground hover:bg-slate-50"
+                        }`}
+                      >
+                        {preset.label}
+                      </button>
+                    );
+                  })}
+                </div>
+                <p className="text-xs text-muted-foreground">
+                  Loads trim/cleanup/padding for this document type. You can still edit values below.
+                </p>
+              </div>
               <label className="flex flex-col gap-2 text-sm">
                 First Page Letterhead
                 <select
