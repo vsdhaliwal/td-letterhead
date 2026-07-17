@@ -77,7 +77,7 @@ const DOCUMENT_TYPE_PRESETS: DocumentTypePreset[] = [
       bottomFooterCleanupOtherPages: 0,
       contentPaddingTopFirstPage: 0,
       contentPaddingTopOtherPages: 0,
-      contentPaddingBottomFirstPage: 50,
+      contentPaddingBottomFirstPage: 40,
       contentPaddingBottomOtherPages: 40,
     },
   },
