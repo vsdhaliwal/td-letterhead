@@ -67,7 +67,6 @@ async function getLetterheadTemplateDefinitions(): Promise<LetterheadTemplateDef
     });
   }
 
-  // Include any PDF present at project root as selectable templates.
   try {
     const rootEntries = await fs.readdir(process.cwd());
     for (const fileName of rootEntries) {
